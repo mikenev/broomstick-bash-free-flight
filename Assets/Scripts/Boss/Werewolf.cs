@@ -18,6 +18,10 @@ namespace BroomstickBash {
     [Header("Refs")] public Transform cam, player;
     [Header("Stats")] public int maxHp = 12;
     public float entryGrace = 2.5f;               // witch invulnerable + no attacks after boss entry
+    /// <summary>FF3: after each hit the werewolf shrugs off spells for HitCooldown s (PhaseRoar after a phase change), so
+    /// nonstop casting can't burst him down before his attacks punish a camper: 12 hits take >= ~18 s.</summary>
+    public const float HitCooldown = 1.1f, PhaseRoar = 1.5f;
+    float hitCool;
     public float minSpawnDistance = 6f;           // fireballs never spawn closer than this to the witch
     public float phase2Hp = 8, phase3Hp = 4;      // HP thresholds (<=)
     [System.NonSerialized] public PhaseTuning[] phases = BossTuning.DefaultPhases();   // code is the source of truth
@@ -56,7 +60,7 @@ namespace BroomstickBash {
     public void Begin(){
       gameObject.SetActive(true);
       pendingShots.Clear();
-      Hp = maxHp; t = 0; mode = Mode.Entering; timer = entryGrace; attackIdx = 0; flash = 0; defeatT = 0;
+      Hp = maxHp; t = 0; hitCool = 0; mode = Mode.Entering; timer = entryGrace; attackIdx = 0; flash = 0; defeatT = 0;
       transform.position = new Vector3(cam.position.x + 16f, 5f, 0); transform.rotation = Quaternion.identity; transform.localScale = Vector3.one;
       SetTint(null); foreach (var r in rends) if (r) r.enabled = true;
       if (anim){ anim.Rebind(); anim.Update(0f); }
@@ -66,7 +70,7 @@ namespace BroomstickBash {
     float TargetX => cam.position.x + 7.5f;
     void Update(){
       var gm = GameManager.I; if (!gm || !gm.IsActive) return;
-      float dt = Time.deltaTime; t += dt; if (immuneCue > 0) immuneCue -= dt;
+      float dt = Time.deltaTime; t += dt; if (immuneCue > 0) immuneCue -= dt; if (hitCool > 0) hitCool -= dt;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
       if (Keyboard.current != null && Keyboard.current.kKey.wasPressedThisFrame) Damage(1);   // dev-only QA: auto-hit
 #endif
@@ -190,15 +194,15 @@ namespace BroomstickBash {
     }
 
     public void Damage(int n){
-      if (mode == Mode.Entering){ Fizzle(); return; }       // entry/grace: immune, but show it
+      if (mode == Mode.Entering || (hitCool > 0 && mode != Mode.Defeated && Hp > 0)){ Fizzle(); return; }   // entry grace / hit cooldown: immune, but show it
       if (Hp <= 0 || mode == Mode.Defeated) return;
       int before = Phase;
-      Hp -= n; flash = 0.1f; SetTint(Color.white, 0.8f);
+      Hp -= n; hitCool = HitCooldown; flash = 0.1f; SetTint(Color.white, 0.8f);
       Puff.Burst(transform.position + Vector3.left, GameConfig.I.sparkleMat, 6);
       if (art && Hp > 0) BroomArt.Trigger(art, "Hurt");
       GameEvents.BossHurt?.Invoke(Hp);
       if (Hp <= 0){ StartDefeat(); return; }
-      if (Phase != before){ Puff.Burst(transform.position, GameConfig.I.fireMat, 14, 0.25f, 6f); GameEvents.BossPhaseChanged?.Invoke(Phase); }
+      if (Phase != before){ hitCool = PhaseRoar; Puff.Burst(transform.position, GameConfig.I.fireMat, 14, 0.25f, 6f); GameEvents.BossPhaseChanged?.Invoke(Phase); }
     }
 
     // Defeat: stagger/shake 1.1 s → topple and fall 0.9 s → poof → 1 s pause → win screen.

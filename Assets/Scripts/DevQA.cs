@@ -30,7 +30,7 @@ namespace BroomstickBash {
         pilotDir = mv.HasValue ? Vector2.ClampMagnitude(mv.Value / (MovementConfig.MaxSpeed * FairnessValidator.Step), 1f) : Vector2.ClampMagnitude(prefer - p.Offset, 1f);
       }
       FlightInput.DebugOverride = pilotDir;
-      if (Mathf.Abs(p.transform.position.y - b.ChestY) < 1.3f && p.CooldownLeft <= 0f) p.CastSpell();
+      if (Mathf.Abs(p.transform.position.y - b.ChestY) < 1.5f && p.CooldownLeft <= 0f) p.CastSpell();
     }
     void Update(){
       var gm = GameManager.I; if (!gm) return;
