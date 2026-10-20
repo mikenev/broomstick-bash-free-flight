@@ -3,9 +3,10 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>Unity Web Player | Broomstick Bash</title>
+    <title>Unity Web Player | Broomstick Bash: Free Flight</title>
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
+  <style id="bb-ff-input-guard-css">html,body{overscroll-behavior:none;}#unity-canvas{touch-action:none;-ms-touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;outline:none}</style>
   </head>
   <body>
     <div id="unity-container" class="unity-desktop">
@@ -20,7 +21,7 @@
       <div id="unity-footer">
         <div id="unity-logo-title-footer"></div>
         <div id="unity-fullscreen-button"></div>
-        <div id="unity-build-title">Broomstick Bash</div>
+        <div id="unity-build-title">Broomstick Bash: Free Flight</div>
       </div>
     </div>
     <script>
@@ -60,7 +61,7 @@
         codeUrl: buildUrl + "/docs.wasm.unityweb",
         streamingAssetsUrl: "StreamingAssets",
         companyName: "mikenev",
-        productName: "Broomstick Bash",
+        productName: "Broomstick Bash: Free Flight",
         productVersion: "1.0",
         showBanner: unityShowBanner,
         // errorHandler: function(err, url, line) {
@@ -129,5 +130,18 @@
       document.body.appendChild(script);
 
     </script>
+  <script id="bb-ff-input-guard">(function(){
+  var c=document.getElementById('unity-canvas'); if(!c) return;
+  var stop=function(e){ if(e.cancelable) e.preventDefault(); };
+  ['touchstart','touchmove','touchend','touchcancel'].forEach(function(t){ c.addEventListener(t,stop,{passive:false}); });
+  ['gesturestart','gesturechange','gestureend','dblclick','contextmenu'].forEach(function(t){ c.addEventListener(t,stop,{passive:false}); });
+  document.addEventListener('contextmenu',function(e){ if(e.target===c) e.preventDefault(); });
+  window.addEventListener('keydown',function(e){
+    var k=e.key||'', tag=(e.target&&e.target.tagName)||'';
+    if((k===' '||k==='Spacebar'||k.indexOf('Arrow')===0) && !/INPUT|TEXTAREA|SELECT/.test(tag)) e.preventDefault();
+  },{passive:false});
+  if(!c.hasAttribute('tabindex')) c.setAttribute('tabindex','-1');
+  c.addEventListener('pointerdown',function(){ try{ c.focus(); }catch(_){} });
+})();</script>
   </body>
 </html>

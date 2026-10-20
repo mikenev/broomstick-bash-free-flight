@@ -117,7 +117,7 @@ public static class BuildWeb {
     AudioClip Clip(string n){ var c = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/" + n); if (!c) Debug.LogWarning("[Audio] missing clip " + n); return c; }
     ga.mainTheme = Clip("Music/main_theme_loop.ogg"); ga.bossTheme = Clip("Music/boss_theme_loop.ogg");
     ga.titleSting = Clip("Music/title_sting.ogg"); ga.gameOverSting = Clip("Music/gameover_sting.ogg"); ga.victorySting = Clip("Music/victory_sting.ogg");
-    ga.flap = Clip("SFX/flap_whoosh.ogg"); ga.cast = Clip("SFX/spell_cast.ogg"); ga.spellHit = Clip("SFX/fireball_impact.ogg");   // non-lethal spell hit (lethal hits play enemy_pop)
+    ga.cast = Clip("SFX/spell_cast.ogg"); ga.spellHit = Clip("SFX/fireball_impact.ogg");   // non-lethal spell hit (lethal hits play enemy_pop)
     ga.sparkle = Clip("SFX/kid_sparkle.ogg"); ga.hurt = Clip("SFX/hit_ouch.ogg"); ga.honk = Clip("SFX/car_honk.ogg");
     ga.bat = Clip("SFX/bat_screech.ogg"); ga.ghost = Clip("SFX/ghost_wail.ogg"); ga.enemyPop = Clip("SFX/enemy_pop.ogg");
     ga.fireballImpact = Clip("SFX/fireball_impact.ogg"); ga.uiClick = Clip("SFX/ui_click.ogg");
@@ -283,23 +283,50 @@ public static class BuildWeb {
     if (Application.isBatchMode) EditorApplication.Exit(fails == 0 ? 0 : 1);
   }
 
+  /// <summary>Free Flight page hardening (mobile + desktop), injected into the generated index.html after every build:
+  /// canvas touch-action:none and preventDefault on touch events (no zoom / pull-to-refresh / long-press callout),
+  /// no context menu on the canvas (right-click), and Space / arrow keys don't scroll the page. Unity still receives all
+  /// events (preventDefault does not stop propagation).</summary>
+  static void PatchIndexHtml(string outDir){
+    var p = Path.Combine(outDir, "index.html"); if (!File.Exists(p)) return;
+    var html = File.ReadAllText(p); if (html.Contains("bb-ff-input-guard")) return;
+    const string css = "<style id=\"bb-ff-input-guard-css\">html,body{overscroll-behavior:none;}#unity-canvas{touch-action:none;-ms-touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;outline:none}</style>";
+    const string js = @"<script id=""bb-ff-input-guard"">(function(){
+  var c=document.getElementById('unity-canvas'); if(!c) return;
+  var stop=function(e){ if(e.cancelable) e.preventDefault(); };
+  ['touchstart','touchmove','touchend','touchcancel'].forEach(function(t){ c.addEventListener(t,stop,{passive:false}); });
+  ['gesturestart','gesturechange','gestureend','dblclick','contextmenu'].forEach(function(t){ c.addEventListener(t,stop,{passive:false}); });
+  document.addEventListener('contextmenu',function(e){ if(e.target===c) e.preventDefault(); });
+  window.addEventListener('keydown',function(e){
+    var k=e.key||'', tag=(e.target&&e.target.tagName)||'';
+    if((k===' '||k==='Spacebar'||k.indexOf('Arrow')===0) && !/INPUT|TEXTAREA|SELECT/.test(tag)) e.preventDefault();
+  },{passive:false});
+  if(!c.hasAttribute('tabindex')) c.setAttribute('tabindex','-1');
+  c.addEventListener('pointerdown',function(){ try{ c.focus(); }catch(_){} });
+})();</script>";
+    html = html.Replace("</head>", css + "\n  </head>").Replace("</body>", js + "\n  </body>");
+    File.WriteAllText(p, html);
+  }
+
   [MenuItem("Broomstick Bash/Build WebGL to docs")]
   public static void Build(){
     int code = 1;
     try {
+      // TODO(FF3): the boss fairness sweep still models the OLD flap physics (FlapModel). It keeps passing (patterns are
+      // unchanged), so it stays as a regression gate until FF3 re-models it with MovementConfig's free-flight kinematics.
       if (!BossFairnessTest.Run()) throw new System.Exception("Boss fairness sweep found unfair patterns; see [Fairness] warnings");
       SetupScene();
       PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Gzip;
       PlayerSettings.WebGL.decompressionFallback = true;
       PlayerSettings.WebGL.threadsSupport = false;
-      PlayerSettings.productName = "Broomstick Bash"; PlayerSettings.companyName = "mikenev";
+      PlayerSettings.productName = "Broomstick Bash: Free Flight"; PlayerSettings.companyName = "mikenev";
       bool dev = System.Environment.GetEnvironmentVariable("BB_DEV") == "1";   // dev build w/ stack traces, for debugging only
       if (dev){ PlayerSettings.WebGL.exceptionSupport = WebGLExceptionSupport.FullWithStacktrace; PlayerSettings.SetStackTraceLogType(LogType.Exception, StackTraceLogType.Full); }
       else PlayerSettings.WebGL.exceptionSupport = WebGLExceptionSupport.ExplicitlyThrownExceptionsOnly;
       var outDir = Path.GetFullPath(dev ? "Builds/WebGLDev" : "docs");
       var r = BuildPipeline.BuildPlayer(new[]{ ScenePath }, outDir, BuildTarget.WebGL, dev ? BuildOptions.Development : BuildOptions.None);
       Debug.Log("BUILD RESULT: " + r.summary.result + " size=" + r.summary.totalSize);
-      if (r.summary.result == UnityEditor.Build.Reporting.BuildResult.Succeeded){ File.WriteAllText(Path.Combine(outDir, ".nojekyll"), ""); code = 0; }
+      if (r.summary.result == UnityEditor.Build.Reporting.BuildResult.Succeeded){ File.WriteAllText(Path.Combine(outDir, ".nojekyll"), ""); PatchIndexHtml(outDir); code = 0; }
     } catch (System.Exception e){ Debug.LogException(e); }
     if (Application.isBatchMode) EditorApplication.Exit(code);
   }

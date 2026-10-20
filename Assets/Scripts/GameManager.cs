@@ -31,7 +31,7 @@ namespace BroomstickBash {
       Distance = 0; Kills = 0; KillScore = 0; newHigh = false; State = GameState.Ready;
       GameEvents.RunReset?.Invoke();
     }
-    public void StartRun(){ if (State == GameState.Ready){ State = GameState.Playing; player.Flap(); player.StartGrace(); } }
+    public void StartRun(){ if (State == GameState.Ready){ State = GameState.Playing; player.StartGrace(); } }
     public void StartBoss(){
       if (State == GameState.Ready) StartRun();
       if (State != GameState.Playing) return;
@@ -46,9 +46,8 @@ namespace BroomstickBash {
     }
     public void GameOver(){ if (!IsActive) return; State = GameState.GameOver; End(); GameEvents.GameOver?.Invoke(); GameEvents.RunEnded?.Invoke(false, Score); }
     public void Win(){ if (State != GameState.Boss) return; KillScore += 500; State = GameState.Win; End(); GameEvents.Won?.Invoke(Score); GameEvents.RunEnded?.Invoke(true, Score); }
-    /// <summary>Playtest fix: restarting from game over / win (flap or R) goes straight into a new run instead of the title.
-    /// The caller returns before player.Tick, so the restarting flap is applied exactly once.</summary>
-    void Restart(){ ResetRun(); State = GameState.Playing; player.Flap(); player.StartGrace(); }
+    /// <summary>Playtest fix: restarting from game over / win (any key/click/tap or R) goes straight into a new run.</summary>
+    void Restart(){ ResetRun(); State = GameState.Playing; player.StartGrace(); }
     void End(){
       endTime = Time.unscaledTime;
       if (Score > HighScore){ HighScore = Score; newHigh = true; PlayerPrefs.SetInt(HighKey, Score); PlayerPrefs.Save(); }
@@ -60,9 +59,9 @@ namespace BroomstickBash {
 #endif
       bool ended = State == GameState.GameOver || State == GameState.Win;
       if (kb != null && kb.rKey.wasPressedThisFrame && State != GameState.Ready){ if (ended){ if (Time.unscaledTime - endTime > 0.6f) Restart(); } else ResetRun(); return; }
-      if (State == GameState.Ready){ if (PlayerController.FlapPressed()) StartRun(); return; }
+      if (State == GameState.Ready){ if (FlightInput.StartPressed()) StartRun(); return; }
       if (ended){
-        if (Time.unscaledTime - endTime > 0.6f && PlayerController.FlapPressed()) Restart();
+        if (Time.unscaledTime - endTime > 0.6f && FlightInput.StartPressed()) Restart();
         return;
       }
       float dt = Time.deltaTime, v = ScrollSpeed;
@@ -79,6 +78,10 @@ namespace BroomstickBash {
 #else
     const string DebugHint = "";
 #endif
+    static bool Touch => TouchControls.I ? TouchControls.I.Visible : Application.isMobilePlatform;
+    static string ControlHint => Touch
+      ? "Drag on the left half to steer (the stick appears under your thumb)     Tap CAST (bottom right) to cast a spell"
+      : "Arrows / WASD: fly (8 directions)     X / F / J / Enter / left-click: cast spell";
     void OnGUI(){
       float s = Screen.height / 720f;
       if (!white){ white = Texture2D.whiteTexture; }
@@ -105,7 +108,7 @@ namespace BroomstickBash {
       GUI.color = ready ? new Color(0, 0, 0, 0.6f) : new Color(0.35f, 0.05f, 0.05f, 0.95f); GUI.DrawTexture(bar, white);
       GUI.color = ready ? new Color(0.6f, 1f, 0.4f) : new Color(1f, 0.75f, 0.25f); GUI.DrawTexture(new Rect(bar.x, bar.y, bar.width * frac, bar.height), white);
       GUI.color = Color.white;
-      GUI.Label(new Rect(285*s, 118*s, 420*s, 34*s), ready ? "READY (X / F / right-click)" : "RECHARGING...", small);
+      GUI.Label(new Rect(285*s, 118*s, 420*s, 34*s), ready ? (Touch ? "READY (CAST button)" : "READY (X / F / J / Enter / click)") : "RECHARGING...", small);
       if (State == GameState.Boss){
         float w = 400 * s, x = (Screen.width - w) / 2;
         GUI.color = new Color(0, 0, 0, 0.6f); GUI.DrawTexture(new Rect(x, 20*s, w, 22*s), white);
@@ -116,11 +119,11 @@ namespace BroomstickBash {
       var full = new Rect(0, 0, Screen.width, Screen.height);
       int sz = Mathf.RoundToInt(24 * s);
       if (State == GameState.Ready)
-        GUI.Label(full, $"BROOMSTICK BASH\n<size={sz}>Space / click / tap: flap     X / F / right-click: cast spell\nSpells zap bats & ghosts, but sparkle harmlessly past trick-or-treaters. Don't touch anything!\n{DebugHint}R: restart\n\nFlap to start</size>", big);
+        GUI.Label(full, $"BROOMSTICK BASH: FREE FLIGHT\n<size={sz}>{ControlHint}\nSpells zap bats & ghosts, but sparkle harmlessly past trick-or-treaters. Don't touch anything!\n{DebugHint}{(Touch ? "" : "R: restart")}\n\n{(Touch ? "Tap" : "Press any key or click")} to start</size>", big);
       else if (State == GameState.GameOver)
-        GUI.Label(full, $"GAME OVER\n<size={sz + 6}>Score {Score}{(newHigh ? "  NEW BEST!" : "")}\nFlap or R to restart</size>", big);
+        GUI.Label(full, $"GAME OVER\n<size={sz + 6}>Score {Score}{(newHigh ? "  NEW BEST!" : "")}\n{(Touch ? "Tap" : "Any key, click or R")} to restart</size>", big);
       else if (State == GameState.Win)
-        GUI.Label(full, $"YOU WIN!\n<size={sz + 6}>The Werewolf is vanquished!\nScore {Score}{(newHigh ? "  NEW BEST!" : "")}\nFlap or R to play again</size>", big);
+        GUI.Label(full, $"YOU WIN!\n<size={sz + 6}>The Werewolf is vanquished!\nScore {Score}{(newHigh ? "  NEW BEST!" : "")}\n{(Touch ? "Tap" : "Any key, click or R")} to play again</size>", big);
     }
   }
 }

@@ -4,8 +4,9 @@ namespace BroomstickBash {
   /// <summary>Witch flap physics, mirrored from PlayerController.</summary>
   public struct FlapModel {
     public float gravity, flapVelocity, maxFall, groundY, ceilingY, playerRadius;
-    public static FlapModel From(PlayerController p, GameConfig c) => new FlapModel{
-      gravity = p.gravity, flapVelocity = p.flapVelocity, maxFall = p.maxFall, groundY = c.groundY, ceilingY = c.ceilingY, playerRadius = 0.42f };
+    /// <summary>TODO(FF3): Free Flight removed flap/gravity from the witch. Until FF3 re-models the boss validator with
+    /// MovementConfig (free 2D kinematics), the runtime check keeps using the legacy M3 flap model so patterns stay as tuned.</summary>
+    public static FlapModel From(PlayerController p, GameConfig c){ var m = Default; m.groundY = c.groundY; m.ceilingY = c.ceilingY; m.playerRadius = MovementConfig.PlayerRadius; return m; }
     public static FlapModel Default => new FlapModel{ gravity = 24f, flapVelocity = 8.2f, maxFall = -12f, groundY = 0f, ceilingY = 10f, playerRadius = 0.42f };
   }
 

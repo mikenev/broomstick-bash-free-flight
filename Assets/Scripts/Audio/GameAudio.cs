@@ -6,11 +6,11 @@ namespace BroomstickBash {
   /// Music: "Midnight Hop" (main_theme_loop) on the title and during the run, crossfades to "Moonfang" (boss_theme_loop)
   /// when the boss starts, and back to Midnight Hop after a win / game over / restart.
   /// WebGL autoplay: nothing plays until the first user input (key, mouse button or touch); then audio is unlocked and the
-  /// current track starts. SFX are rate-limited per clip so frequent sounds (flap, honk) don't stack.</summary>
+  /// current track starts. SFX are rate-limited per clip so frequent sounds (honk, casts) don't stack. Free Flight: no flap SFX.</summary>
   public class GameAudio : MonoBehaviour {
     public static GameAudio I;
     [Header("Music")] public AudioClip mainTheme, bossTheme, titleSting, gameOverSting, victorySting;
-    [Header("SFX")] public AudioClip flap, cast, spellHit, sparkle, hurt, honk, bat, ghost, enemyPop, fireballImpact, uiClick;
+    [Header("SFX")] public AudioClip cast, spellHit, sparkle, hurt, honk, bat, ghost, enemyPop, fireballImpact, uiClick;
     [Header("Boss SFX")] public AudioClip roar, bossHurt, fireballThrow, bossDefeat;
     [Header("Mix")] [Range(0, 1)] public float musicVolume = 0.35f, bossMusicVolume = 0.42f, sfxVolume = 0.85f;
     public float crossfade = 1.2f;
@@ -21,7 +21,6 @@ namespace BroomstickBash {
     AudioSource musA, musB, sfx, active; AudioClip target; float duck = 1f, duckUntil;
     readonly Dictionary<string, float> lastPlay = new();
     GameState lastState = (GameState)(-1);
-    int lastFlaps;
     GameManager gm;
 
     struct Rule { public AudioClip clip; public float vol, minGap; }
@@ -33,7 +32,7 @@ namespace BroomstickBash {
       musA = NewSource(true); musB = NewSource(true); sfx = NewSource(false); sfx.volume = 1f; active = musA;   // one-shots scale by PlayOneShot volume; source must be at 1
       rules = new Dictionary<string, Rule>();
       void R(string id, AudioClip c, float v, float g){ rules[id] = new Rule{ clip = c, vol = v, minGap = g }; }
-      R("flap", flap, 0.30f, 0.12f); R("cast", cast, 0.45f, 0.10f); R("spellHit", spellHit, 0.50f, 0.06f); R("sparkle", sparkle, 0.45f, 0.20f);
+      R("cast", cast, 0.45f, 0.10f); R("spellHit", spellHit, 0.50f, 0.06f); R("sparkle", sparkle, 0.45f, 0.20f);
       R("immune", sparkle, 0.30f, 0.25f); R("hurt", hurt, 0.90f, 0.30f); R("honk", honk, 0.40f, 2.50f); R("bat", bat, 0.35f, 1.50f);
       R("ghost", ghost, 0.40f, 2.50f); R("pop", enemyPop, 0.55f, 0.06f); R("blocked", fireballImpact, 0.33f, 0.10f);
       R("zap", fireballImpact, 0.55f, 0.10f); R("ui", uiClick, 0.35f, 0.15f);
@@ -82,9 +81,6 @@ namespace BroomstickBash {
           if (gm.State == GameState.Playing && (lastState == GameState.Ready || (int)lastState == -1)) One("ui");
           lastState = gm.State;
         }
-        int f = gm.player ? gm.player.flapsThisRun : 0;   // flap SFX without touching PlayerController
-        if (f > lastFlaps && gm.IsActive) One("flap");
-        lastFlaps = f;
       }
       // music crossfade toward `target`
       if (Time.unscaledTime > duckUntil) duck = Mathf.MoveTowards(duck, 1f, Time.unscaledDeltaTime * 1.5f);
@@ -139,6 +135,6 @@ namespace BroomstickBash {
     void OnBossDefeated(){ One("bossDefeat"); Music(mainTheme); Duck(0.25f, 4f); }
     void OnGameOver(){ One("gameOver"); Music(mainTheme); Duck(0.3f, 3f); }
     void OnWon(int score){ One("victory"); Duck(0.25f, 4f); }
-    void OnReset(){ Music(mainTheme); lastFlaps = 0; }
+    void OnReset(){ Music(mainTheme); }
   }
 }

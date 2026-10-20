@@ -1,21 +1,23 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 namespace BroomstickBash {
-  /// <summary>Witch: flap physics, hearts, invulnerability flash, spell casting. Moves forward at the scroll speed.</summary>
+  /// <summary>Witch: free-flight steering (see MovementConfig for the model), hearts, invulnerability flash, spell casting.
+  /// Position = scroll anchor (trackX, advanced at the scroll speed, followed by the camera) + a steerable offset.</summary>
   public class PlayerController : MonoBehaviour {
-    public float gravity = 24f, flapVelocity = 8.2f, maxFall = -12f;
-    public int maxHearts = 3;
-    public float invulnTime = 1.5f, castCooldown = 0.45f;
+    public int maxHearts = MovementConfig.Hearts;
+    public float invulnTime = MovementConfig.InvulnTime, castCooldown = MovementConfig.CastCooldown;
     public int Hearts { get; private set; }
-    public float VelocityY => vy;
+    public Vector2 Velocity => vel;          // m/s relative to the scroll anchor
+    public float VelocityY => vel.y;
+    public float TrackX => trackX;           // scroll anchor the camera follows
+    public Vector2 Offset => offset;
     public bool Invulnerable => invuln > 0;
     public float CooldownLeft => cool;
-    float vy, invuln, cool; Renderer[] rends;
-    public int flapsThisRun;
+    Vector2 vel, offset; float trackX, invuln, cool; Renderer[] rends; Camera cam;
 
     GameObject art;
     /// <summary>Seconds after start/restart during which bouncing off the street is free (no heart lost).</summary>
-    public float streetGrace = 1.25f; float grace;
+    public float streetGrace = MovementConfig.StreetGrace; float grace;
     void Awake(){
       // M2 art: BA_Witch (origin = broom handle; gray-box broom sits at y -0.3). The hurt flash toggles only the art renderers
       // when art is present, so the hidden gray-box never reappears; falls back to the gray-box renderers otherwise.
@@ -25,36 +27,35 @@ namespace BroomstickBash {
     }
     public void StartGrace(){ grace = streetGrace; }
     public void ResetPlayer(){
-      Hearts = maxHearts; vy = 0; invuln = 0; cool = 0; flapsThisRun = 0; grace = streetGrace;
-      transform.position = new Vector3(0, 5f, 0); transform.rotation = Quaternion.identity; SetVisible(true);
-    }
-    public static bool FlapPressed(){
-      return (Keyboard.current != null && (Keyboard.current.spaceKey.wasPressedThisFrame || Keyboard.current.upArrowKey.wasPressedThisFrame || Keyboard.current.wKey.wasPressedThisFrame))
-        || (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
-        || (Touchscreen.current != null && Touchscreen.current.primaryTouch.press.wasPressedThisFrame);
-    }
-    static bool CastPressed(){
-      return (Keyboard.current != null && (Keyboard.current.xKey.wasPressedThisFrame || Keyboard.current.fKey.wasPressedThisFrame))
-        || (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame)
-        || (Touchscreen.current != null && Touchscreen.current.touches.Count > 1 && Touchscreen.current.touches[1].press.wasPressedThisFrame);
+      Hearts = maxHearts; vel = Vector2.zero; invuln = 0; cool = 0; grace = streetGrace;
+      trackX = 0f; offset = new Vector2(MovementConfig.StartOffsetX, MovementConfig.StartY);
+      transform.position = new Vector3(trackX + offset.x, offset.y, 0); transform.rotation = Quaternion.identity; SetVisible(true);
     }
     /// <summary>Invulnerability without a hit (boss entry grace, defeat sequence). Flashes like a hit.</summary>
     public void GrantInvulnerability(float seconds){ invuln = Mathf.Max(invuln, seconds); }
-    public void Flap(){ vy = flapVelocity; flapsThisRun++; BroomstickBash.Art.BroomArt.Trigger(art, "Flap"); }
 
     public void Tick(float dt, float scroll){
-      var cfg = GameConfig.I;
-      if (FlapPressed()) Flap();
       if (cool > 0) cool -= dt;
       if (grace > 0) grace -= dt;
-      if (CastPressed() && cool <= 0) CastSpell();
-      vy = Mathf.Max(vy - gravity * dt, maxFall);
-      var p = transform.position; p.x += scroll * dt; p.y += vy * dt;
-      float top = cfg.ceilingY - 0.4f, bottom = cfg.groundY + 0.45f;
-      if (p.y > top){ p.y = top; vy = Mathf.Min(vy, 0); }
-      if (p.y < bottom){ p.y = bottom; if (grace <= 0) Hit(); vy = flapVelocity * 0.9f; } // street bounce costs a heart (if not invulnerable)
-      transform.position = p;
-      transform.rotation = Quaternion.Euler(0, 0, Mathf.Clamp(vy * 3f, -30, 25));
+      if (FlightInput.CastPressed() && cool <= 0) CastSpell();
+      // input -> velocity (accel/decel smoothing) -> offset; never sets position from input directly
+      Vector2 wish = FlightInput.Move() * MovementConfig.MaxSpeed;
+      float rate = wish.sqrMagnitude > 0.0001f ? MovementConfig.AccelRate : MovementConfig.DecelRate;
+      vel = Vector2.MoveTowards(vel, wish, rate * dt);
+      offset += vel * dt;
+      if (!cam) cam = Camera.main;
+      var hb = MovementConfig.HorizontalBounds(cam);
+      if (offset.x < hb.x){ offset.x = hb.x; vel.x = Mathf.Max(vel.x, 0); }
+      if (offset.x > hb.y){ offset.x = hb.y; vel.x = Mathf.Min(vel.x, 0); }
+      if (offset.y > MovementConfig.TopY){ offset.y = MovementConfig.TopY; vel.y = Mathf.Min(vel.y, 0); }
+      if (offset.y < MovementConfig.BottomY){
+        offset.y = MovementConfig.BottomY;
+        if (grace <= 0) Hit();                                   // street contact costs a heart (grace + invuln apply)
+        vel.y = MovementConfig.StreetBounceSpeed;
+      }
+      trackX += scroll * dt;
+      transform.position = new Vector3(trackX + offset.x, offset.y, 0);
+      transform.rotation = Quaternion.Euler(0, 0, Mathf.Clamp(vel.y * 2.5f, -20, 20) - Mathf.Clamp(vel.x, -7, 7));
       if (invuln > 0){ invuln -= dt; SetVisible(invuln <= 0 || Mathf.FloorToInt(invuln * 12f) % 2 == 0); }
     }
     public void CastSpell(){

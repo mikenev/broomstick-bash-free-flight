@@ -7,7 +7,7 @@ namespace BroomstickBash {
   public class DevQA : MonoBehaviour {
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Boot(){ DontDestroyOnLoad(new GameObject("DevQA").AddComponent<DevQA>().gameObject); }
-    bool auto; float minFireballDist = 999f; readonly System.Collections.Generic.HashSet<int> seen = new();
+    bool auto; float logT; float minFireballDist = 999f; readonly System.Collections.Generic.HashSet<int> seen = new();
     void OnEnable(){
       GameEvents.PlayerHit += h => Debug.Log($"[QA] hit hearts={h} t={Time.time:0.00}");
       GameEvents.BossStarted += () => { minFireballDist = 999f; Debug.Log($"[QA] boss start t={Time.time:0.00} hazards={FindObjectsByType<Fireball>(FindObjectsSortMode.None).Length} obstacles={FindObjectsByType<ObstacleBase>(FindObjectsSortMode.None).Length}"); };
@@ -17,6 +17,7 @@ namespace BroomstickBash {
       GameEvents.Won += _ => Debug.Log($"[QA] WIN minFireballSpawnDist={minFireballDist:0.00} fired={Werewolf.FiredPatterns} rejected={Werewolf.RejectedPatterns}");
       GameEvents.GameOver += () => Debug.Log($"[QA] GAME OVER minFireballSpawnDist={minFireballDist:0.00}");
     }
+    void OnDisable(){ FlightInput.DebugOverride = null; }
     void Update(){
       var gm = GameManager.I; if (!gm) return;
       if (Keyboard.current != null && Keyboard.current.pKey.wasPressedThisFrame){ auto = !auto; Debug.Log($"[QA] autopilot {auto}"); }
@@ -24,9 +25,14 @@ namespace BroomstickBash {
         if (!seen.Add(f.GetInstanceID())) continue;
         minFireballDist = Mathf.Min(minFireballDist, Vector2.Distance(f.transform.position, gm.player.transform.position));
       }
-      // hover at 4.5 m, or at the werewolf's chest height during the boss so QA spells can connect
+      if (gm.IsActive && (logT -= Time.unscaledDeltaTime) <= 0){   // movement telemetry for headless smoke tests
+        logT = 0.1f; var p = gm.player; var hb = MovementConfig.HorizontalBounds(Camera.main);
+        Debug.Log($"[QA] pos t={Time.time:0.00} off=({p.Offset.x:0.00},{p.Offset.y:0.00}) vel=({p.Velocity.x:0.00},{p.Velocity.y:0.00}) speed={p.Velocity.magnitude:0.00} bx=({hb.x:0.00},{hb.y:0.00}) spells={FindObjectsByType<Spell>(FindObjectsSortMode.None).Length} cool={p.CooldownLeft:0.00} hearts={p.Hearts}");
+      }
+      // hover at 4.5 m, or at the werewolf's chest height during the boss so QA spells can connect (steers via FlightInput)
       float target = gm.State == GameState.Boss && gm.boss && gm.boss.gameObject.activeSelf ? Mathf.Clamp(gm.boss.transform.position.y - 0.3f, 1.5f, 8.5f) : 4.5f;
-      if (auto && gm.IsActive && gm.player.transform.position.y < target && gm.player.VelocityY < 0) gm.player.Flap();
+      if (auto && gm.IsActive) FlightInput.DebugOverride = new Vector2(0, Mathf.Clamp((target - gm.player.transform.position.y) * 1.5f, -1f, 1f));
+      else FlightInput.DebugOverride = null;
     }
   }
 }
