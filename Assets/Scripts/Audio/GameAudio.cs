@@ -6,11 +6,14 @@ namespace BroomstickBash {
   /// Music: "Midnight Hop" (main_theme_loop) on the title and during the run, crossfades to "Moonfang" (boss_theme_loop)
   /// when the boss starts, and back to Midnight Hop after a win / game over / restart.
   /// WebGL autoplay: nothing plays until the first user input (key, mouse button or touch); then audio is unlocked and the
-  /// current track starts. SFX are rate-limited per clip so frequent sounds (honk, casts) don't stack. Free Flight: no flap SFX.</summary>
+  /// current track starts. SFX are rate-limited per clip so frequent sounds (honk, casts) don't stack. Free Flight: no flap SFX.
+  /// Broom wind (Free Flight): a looping wind bed whose volume/pitch follow the witch's speed, plus a whoosh on sharp turns
+  /// (see the Wind* constants and UpdateWind). Speed is read from PlayerController.Velocity / MovementConfig.MaxSpeed.</summary>
   public class GameAudio : MonoBehaviour {
     public static GameAudio I;
     [Header("Music")] public AudioClip mainTheme, bossTheme, titleSting, gameOverSting, victorySting;
     [Header("SFX")] public AudioClip cast, spellHit, sparkle, hurt, honk, bat, ghost, enemyPop, fireballImpact, uiClick;
+    [Header("Broom wind")] public AudioClip windLoop, turnWhoosh;
     [Header("Boss SFX")] public AudioClip roar, bossHurt, fireballThrow, bossDefeat;
     [Header("Mix")] [Range(0, 1)] public float musicVolume = 0.35f, bossMusicVolume = 0.42f, sfxVolume = 0.85f;
     public float crossfade = 1.2f;
@@ -18,6 +21,13 @@ namespace BroomstickBash {
     public bool Unlocked { get; private set; }
     public string CurrentTrack => target ? target.name : "none";
 
+    // Broom wind tuning (audio only; movement numbers live in MovementConfig)
+    public const float WindMaxVolume = 0.8f, WindMinPitch = 0.8f, WindMaxPitch = 1.3f, WindSmoothTime = 0.15f;
+    public const float WhooshTurnRate = 60f, WhooshMinSpeed01 = 0.2f, WhooshCooldown = 0.35f, WhooshVolume = 0.5f;
+    AudioSource wind; float windSpeed01, lastHeading, lastMovingTime = -1f, lastWhoosh = -99f; bool hadHeading;
+    public float WindVolume => wind ? wind.volume : 0f;
+    public float WindPitch => wind ? wind.pitch : 1f;
+    public int Whooshes { get; private set; }
     AudioSource musA, musB, sfx, active; AudioClip target; float duck = 1f, duckUntil;
     readonly Dictionary<string, float> lastPlay = new();
     GameState lastState = (GameState)(-1);
@@ -29,7 +39,7 @@ namespace BroomstickBash {
 
     void Awake(){
       I = this;
-      musA = NewSource(true); musB = NewSource(true); sfx = NewSource(false); sfx.volume = 1f; active = musA;   // one-shots scale by PlayOneShot volume; source must be at 1
+      musA = NewSource(true); musB = NewSource(true); sfx = NewSource(false); sfx.volume = 1f; active = musA; wind = NewSource(true);   // one-shots scale by PlayOneShot volume; source must be at 1
       rules = new Dictionary<string, Rule>();
       void R(string id, AudioClip c, float v, float g){ rules[id] = new Rule{ clip = c, vol = v, minGap = g }; }
       R("cast", cast, 0.45f, 0.10f); R("spellHit", spellHit, 0.50f, 0.06f); R("sparkle", sparkle, 0.45f, 0.20f);
@@ -70,6 +80,7 @@ namespace BroomstickBash {
       if (Unlocked) return; Unlocked = true;
       Debug.Log("[Audio] unlocked on first input; music=" + CurrentTrack);
       if (target){ active.clip = target; active.volume = 0; active.Play(); }
+      if (windLoop){ wind.clip = windLoop; wind.volume = 0; wind.pitch = WindMinPitch; wind.Play(); }   // runs silently; volume follows speed
       One("title");
     }
 
@@ -82,6 +93,7 @@ namespace BroomstickBash {
           lastState = gm.State;
         }
       }
+      UpdateWind();
       // music crossfade toward `target`
       if (Time.unscaledTime > duckUntil) duck = Mathf.MoveTowards(duck, 1f, Time.unscaledDeltaTime * 1.5f);
       float want = (target == bossTheme ? bossMusicVolume : musicVolume) * duck;
@@ -90,6 +102,38 @@ namespace BroomstickBash {
       active.volume = Mathf.MoveTowards(active.volume, active.clip == target && target ? want : 0f, step * Mathf.Max(want, 0.3f) * 2f);
       other.volume = Mathf.MoveTowards(other.volume, 0f, step * 0.6f);
       if (other.isPlaying && other.volume <= 0.001f) other.Stop();
+    }
+
+    /// <summary>Wind bed volume/pitch follow speed01 = |velocity| / MaxSpeed (exponentially smoothed over WindSmoothTime);
+    /// silent outside an active run (title, game over, win) and while time is frozen. The whoosh fires when the heading
+    /// turns faster than WhooshTurnRate deg/s while moving above WhooshMinSpeed01, at most once per WhooshCooldown s.</summary>
+    void UpdateWind(){
+      if (!wind) return;
+      var pc = gm ? gm.player : null;
+      bool live = pc && gm.IsActive && Time.timeScale > 0f;
+      Vector2 v = live ? pc.Velocity : Vector2.zero;
+      float raw = Mathf.Clamp01(v.magnitude / MovementConfig.MaxSpeed);
+      float dt = Time.unscaledDeltaTime;
+      windSpeed01 = Mathf.Lerp(windSpeed01, raw, 1f - Mathf.Exp(-dt / WindSmoothTime));
+      wind.volume = Mathf.Lerp(0f, WindMaxVolume, windSpeed01);
+      wind.pitch = Mathf.Lerp(WindMinPitch, WindMaxPitch, windSpeed01);
+      if (windLoop && !wind.isPlaying){ wind.clip = windLoop; wind.Play(); }
+      // turn whoosh: heading change rate, measured across brief stops so a direction reversal counts as a sharp turn
+      if (!live){ hadHeading = false; return; }
+      if (raw < WhooshMinSpeed01) return;
+      float heading = Mathf.Atan2(v.y, v.x) * Mathf.Rad2Deg, now = Time.time;
+      if (hadHeading){
+        float span = Mathf.Max(now - lastMovingTime, 1e-3f);
+        float rate = Mathf.Abs(Mathf.DeltaAngle(lastHeading, heading)) / span;
+        if (span < 0.5f && rate > WhooshTurnRate && Time.unscaledTime - lastWhoosh >= WhooshCooldown && turnWhoosh){
+          lastWhoosh = Time.unscaledTime; Whooshes++;
+          sfx.PlayOneShot(turnWhoosh, WhooshVolume * raw * sfxVolume);
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+          Debug.Log($"[Audio] whoosh turn={rate:0}deg/s speed01={raw:0.00}");
+#endif
+        }
+      }
+      lastHeading = heading; lastMovingTime = now; hadHeading = true;
     }
 
     /// <summary>Switch music with a crossfade. Same track = no-op (keeps playing, no restart).</summary>

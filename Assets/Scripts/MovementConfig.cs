@@ -28,7 +28,7 @@ namespace BroomstickBash {
     // --- horizontal bounds (offset from the scroll anchor trackX; the camera centre is trackX + CameraLead) ---
     public const float CameraLead = 5f;          // must match SideCamera.lead
     public const float ScreenFractionX = 0.45f;  // witch may use only the left 45% of the visible width
-    public const float LeftMargin = 0.9f;        // m kept free at the left screen edge
+    public const float LeftMargin = 1.6f;        // m from the left screen edge to the witch pivot (broom tail reaches ~0.9 m behind her)
     public const float StartOffsetX = 0f, StartY = 5f;
     // Reference values at 16:9 (camera z = -17, FOV 38): visible half-width 10.4 m -> offset.x in [-4.5, +4.0].
     public const float RefMinOffsetX = -4.5f, RefMaxOffsetX = 4.0f;

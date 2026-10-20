@@ -117,6 +117,7 @@ public static class BuildWeb {
     AudioClip Clip(string n){ var c = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/" + n); if (!c) Debug.LogWarning("[Audio] missing clip " + n); return c; }
     ga.mainTheme = Clip("Music/main_theme_loop.ogg"); ga.bossTheme = Clip("Music/boss_theme_loop.ogg");
     ga.titleSting = Clip("Music/title_sting.ogg"); ga.gameOverSting = Clip("Music/gameover_sting.ogg"); ga.victorySting = Clip("Music/victory_sting.ogg");
+    ga.windLoop = Clip("SFX/broom_wind_loop.ogg"); ga.turnWhoosh = Clip("SFX/broom_turn_whoosh.ogg");   // Free Flight broom wind
     ga.cast = Clip("SFX/spell_cast.ogg"); ga.spellHit = Clip("SFX/fireball_impact.ogg");   // non-lethal spell hit (lethal hits play enemy_pop)
     ga.sparkle = Clip("SFX/kid_sparkle.ogg"); ga.hurt = Clip("SFX/hit_ouch.ogg"); ga.honk = Clip("SFX/car_honk.ogg");
     ga.bat = Clip("SFX/bat_screech.ogg"); ga.ghost = Clip("SFX/ghost_wail.ogg"); ga.enemyPop = Clip("SFX/enemy_pop.ogg");

@@ -27,7 +27,7 @@ namespace BroomstickBash {
       }
       if (gm.IsActive && (logT -= Time.unscaledDeltaTime) <= 0){   // movement telemetry for headless smoke tests
         logT = 0.1f; var p = gm.player; var hb = MovementConfig.HorizontalBounds(Camera.main);
-        Debug.Log($"[QA] pos t={Time.time:0.00} off=({p.Offset.x:0.00},{p.Offset.y:0.00}) vel=({p.Velocity.x:0.00},{p.Velocity.y:0.00}) speed={p.Velocity.magnitude:0.00} bx=({hb.x:0.00},{hb.y:0.00}) spells={FindObjectsByType<Spell>(FindObjectsSortMode.None).Length} cool={p.CooldownLeft:0.00} hearts={p.Hearts}");
+        Debug.Log($"[QA] pos t={Time.time:0.00} off=({p.Offset.x:0.00},{p.Offset.y:0.00}) vel=({p.Velocity.x:0.00},{p.Velocity.y:0.00}) speed={p.Velocity.magnitude:0.00} bx=({hb.x:0.00},{hb.y:0.00}) spells={FindObjectsByType<Spell>(FindObjectsSortMode.None).Length} cool={p.CooldownLeft:0.00} hearts={p.Hearts} wind={(GameAudio.I ? GameAudio.I.WindVolume : 0):0.000} pitch={(GameAudio.I ? GameAudio.I.WindPitch : 0):0.000} whooshes={(GameAudio.I ? GameAudio.I.Whooshes : 0)}");
       }
       // hover at 4.5 m, or at the werewolf's chest height during the boss so QA spells can connect (steers via FlightInput)
       float target = gm.State == GameState.Boss && gm.boss && gm.boss.gameObject.activeSelf ? Mathf.Clamp(gm.boss.transform.position.y - 0.3f, 1.5f, 8.5f) : 4.5f;
