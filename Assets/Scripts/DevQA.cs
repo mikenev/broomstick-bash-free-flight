@@ -44,7 +44,7 @@ namespace BroomstickBash {
       }
       if (gm.IsActive && (logT -= Time.unscaledDeltaTime) <= 0){   // movement telemetry for headless smoke tests
         logT = 0.1f; var p = gm.player; var hb = MovementConfig.HorizontalBounds(Camera.main);
-        Debug.Log($"[QA] pos t={Time.time:0.00} off=({p.Offset.x:0.00},{p.Offset.y:0.00}) vel=({p.Velocity.x:0.00},{p.Velocity.y:0.00}) speed={p.Velocity.magnitude:0.00} bx=({hb.x:0.00},{hb.y:0.00}) spells={FindObjectsByType<Spell>(FindObjectsSortMode.None).Length} cool={p.CooldownLeft:0.00} hearts={p.Hearts} chest={(gm.State == GameState.Boss && gm.boss ? gm.boss.ChestY : 0f):0.00} bossHp={(gm.boss ? gm.boss.Hp : 0)}");
+        Debug.Log($"[QA] pos t={Time.time:0.00} off=({p.Offset.x:0.00},{p.Offset.y:0.00}) vel=({p.Velocity.x:0.00},{p.Velocity.y:0.00}) speed={p.Velocity.magnitude:0.00} bx=({hb.x:0.00},{hb.y:0.00}) spells={FindObjectsByType<Spell>(FindObjectsSortMode.None).Length} cool={p.CooldownLeft:0.00} hearts={p.Hearts} chest={(gm.State == GameState.Boss && gm.boss ? gm.boss.ChestY : 0f):0.00} bossHp={(gm.boss ? gm.boss.Hp : 0)} wind={(GameAudio.I ? GameAudio.I.WindVolume : 0):0.000} pitch={(GameAudio.I ? GameAudio.I.WindPitch : 0):0.000} whooshes={(GameAudio.I ? GameAudio.I.Whooshes : 0)}");
       }
       // P autopilot: hover at 4.5 m on the street; in the boss fight dodge with the fairness search (same model as the
       // gate, sees live + telegraphed fireballs) while preferring the werewolf's chest height, and cast when level with him
