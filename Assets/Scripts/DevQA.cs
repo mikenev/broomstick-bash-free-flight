@@ -24,9 +24,10 @@ namespace BroomstickBash {
         if (!seen.Add(f.GetInstanceID())) continue;
         minFireballDist = Mathf.Min(minFireballDist, Vector2.Distance(f.transform.position, gm.player.transform.position));
       }
-      // hover at 4.5 m, or at the werewolf's chest height during the boss so QA spells can connect
+      // hover at 4.5 m, or at the werewolf's chest height during the boss so QA spells can connect (steers via FlightInput)
       float target = gm.State == GameState.Boss && gm.boss && gm.boss.gameObject.activeSelf ? Mathf.Clamp(gm.boss.transform.position.y - 0.3f, 1.5f, 8.5f) : 4.5f;
-      if (auto && gm.IsActive && gm.player.transform.position.y < target && gm.player.VelocityY < 0) gm.player.Flap();
+      if (auto && gm.IsActive) FlightInput.DebugOverride = new Vector2(0, Mathf.Clamp((target - gm.player.transform.position.y) * 1.5f, -1f, 1f));
+      else FlightInput.DebugOverride = null;
     }
   }
 }

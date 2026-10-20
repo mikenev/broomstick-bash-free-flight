@@ -2,11 +2,13 @@ using UnityEngine;
 namespace BroomstickBash {
   /// <summary>Side camera: follows the player's x with a lead, fixed height; slight vertical easing for 2.5D feel.</summary>
   public class SideCamera : MonoBehaviour {
-    public Transform target; public float lead = 5f, height = 5f, distance = 17f, yFollow = 0.15f;
+    public Transform target; PlayerController pc; public float lead = MovementConfig.CameraLead, height = 5f, distance = 17f, yFollow = 0.15f;
     void LateUpdate(){
       if (!target) return;
       float y = height + (target.position.y - height) * yFollow;
-      transform.position = new Vector3(target.position.x + lead, y, -distance);
+      if (!pc) pc = target.GetComponent<PlayerController>();
+      float ax = pc ? pc.TrackX : target.position.x;            // free flight: follow the scroll anchor, not the witch
+      transform.position = new Vector3(ax + lead, y, -distance);
       transform.rotation = Quaternion.Euler(2f, 0, 0);
     }
   }
