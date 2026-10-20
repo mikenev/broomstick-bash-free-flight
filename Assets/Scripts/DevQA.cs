@@ -23,10 +23,7 @@ namespace BroomstickBash {
       var p = gm.player;
       if ((pilotT -= Time.deltaTime) <= 0f){
         pilotT = 0.05f;
-        var shots = new System.Collections.Generic.List<Shot>(); float scroll = gm.ScrollSpeed;
-        foreach (var f in FindObjectsByType<Fireball>(FindObjectsSortMode.None)){
-          var q = f.transform.position; shots.Add(new Shot{ pos = new Vector2(q.x - p.TrackX, q.y), vel = new Vector2(f.vel.x - scroll, f.vel.y), gravity = f.gravity, live = true });
-        }
+        var shots = b.LiveShots();   // in-air + not-yet-launched stream shots
         if (b.PlannedShots != null) shots.AddRange(b.PlannedShots);
         var prefer = new Vector2(0.5f, Mathf.Clamp(b.ChestY, MovementConfig.BottomY + 0.6f, MovementConfig.TopY - 0.3f));
         var mv = FairnessValidator.Steer(shots, FlightModel.FromConfig(), p.Offset, prefer, 1.5f, b.TelegraphLeft);

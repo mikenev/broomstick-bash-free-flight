@@ -51,10 +51,11 @@ namespace BroomstickBash {
       rends = GetComponentsInChildren<Renderer>(false);
       pc = player ? player.GetComponent<PlayerController>() : null;
     }
-    void OnDisable(){ ClearTells(); }
+    void OnDisable(){ ClearTells(); pendingShots.Clear(); }
 
     public void Begin(){
       gameObject.SetActive(true);
+      pendingShots.Clear();
       Hp = maxHp; t = 0; mode = Mode.Entering; timer = entryGrace; attackIdx = 0; flash = 0; defeatT = 0;
       transform.position = new Vector3(cam.position.x + 16f, 5f, 0); transform.rotation = Quaternion.identity; transform.localScale = Vector3.one;
       SetTint(null); foreach (var r in rends) if (r) r.enabled = true;
@@ -70,6 +71,7 @@ namespace BroomstickBash {
       if (Keyboard.current != null && Keyboard.current.kKey.wasPressedThisFrame) Damage(1);   // dev-only QA: auto-hit
 #endif
       if (mode == Mode.Defeated){ DefeatTick(dt); return; }
+      TickPending(dt);
       var p = transform.position;
       p.x = Mathf.Max(Mathf.MoveTowards(p.x, TargetX, (gm.ScrollSpeed + 6f) * dt), TargetX);
       float bobAmp = mode == Mode.Telegraph ? 0.3f : BossTuning.BobAmp(Phase);   // holds (mostly) still while winding up
@@ -108,12 +110,14 @@ namespace BroomstickBash {
 #endif
     }
     /// <summary>Fireballs already in the air, in the scroll-anchor frame (x and velocity relative to TrackX, y absolute).</summary>
-    List<Shot> LiveShots(){
+    public List<Shot> LiveShots(){
       var live = new List<Shot>(); float scroll = GameManager.I.ScrollSpeed;
       foreach (var f in FindObjectsByType<Fireball>(FindObjectsSortMode.None)){
         var p = f.transform.position;
         live.Add(new Shot{ pos = new Vector2(p.x - pc.TrackX, p.y), vel = new Vector2(f.vel.x - scroll, f.vel.y), gravity = f.gravity, live = true });
       }
+      // stream / staggered shots of the previous attack that have not launched yet count too (they start at their spawn point)
+      foreach (var (q, left) in pendingShots) live.Add(new Shot{ pos = q.pos, vel = q.vel, gravity = q.gravity, delay = Mathf.Max(0f, left), live = true });
       return live;
     }
 
@@ -156,7 +160,7 @@ namespace BroomstickBash {
       foreach (var s in planned){
         var at = new Vector3(pc.TrackX + s.pos.x, s.pos.y, 0);
         if (Vector2.Distance(at, player.position) < minSpawnDistance) continue;   // hard guarantee, even if the witch moved
-        if (s.delay > 0){ StartCoroutine(Delayed(s, at)); continue; }
+        if (s.delay > 0){ pendingShots.Add((s, s.delay)); continue; }
         Spawn(s, at);
       }
       ClearTells(); SetTint(null); transform.localScale = Vector3.one;
@@ -164,11 +168,17 @@ namespace BroomstickBash {
       mode = Mode.Idle; timer = committed.rest; FiredPatterns++;
       GameEvents.BossFired?.Invoke();
     }
-    System.Collections.IEnumerator Delayed(Shot s, Vector3 at){
-      float d = s.delay; while (d > 0){ if (GameManager.I.IsActive) d -= Time.deltaTime; yield return null; }
-      if (mode == Mode.Defeated) yield break;
-      at = new Vector3(pc.TrackX + s.pos.x, s.pos.y, 0);
-      if (Vector2.Distance(at, player.position) >= minSpawnDistance) Spawn(s, at);
+    /// <summary>Delayed shots (streams, staggered bursts) waiting to launch; also reported by LiveShots so the next plan
+    /// accounts for them. Ticked in Update (pauses with the game, cleared on Begin / defeat / disable).</summary>
+    readonly List<(Shot s, float left)> pendingShots = new();
+    void TickPending(float dt){
+      for (int i = pendingShots.Count - 1; i >= 0; i--){
+        var (q, left) = pendingShots[i]; left -= dt;
+        if (left > 0f){ pendingShots[i] = (q, left); continue; }
+        pendingShots.RemoveAt(i);
+        var at = new Vector3(pc.TrackX + q.pos.x, q.pos.y, 0);
+        if (Vector2.Distance(at, player.position) >= minSpawnDistance) Spawn(q, at);
+      }
     }
     void Spawn(Shot s, Vector3 at){
       var cfg = GameConfig.I;
@@ -193,7 +203,7 @@ namespace BroomstickBash {
 
     // Defeat: stagger/shake 1.1 s → topple and fall 0.9 s → poof → 1 s pause → win screen.
     void StartDefeat(){
-      mode = Mode.Defeated; defeatT = 0; poofed = false; ClearTells(); StopAllCoroutines(); SetTint(Color.white, 0.8f);
+      mode = Mode.Defeated; defeatT = 0; poofed = false; ClearTells(); pendingShots.Clear(); SetTint(Color.white, 0.8f);
       foreach (var f in FindObjectsByType<Fireball>(FindObjectsSortMode.None)) Destroy(f.gameObject);
       if (pc) pc.GrantInvulnerability(5f);
       if (art) BroomArt.Trigger(art, "Defeat");

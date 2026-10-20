@@ -110,7 +110,7 @@ namespace BroomstickBash {
           break;
         }
         case AttackKind.Sweep: {
-          var rows = new List<float>{ 0.75f, 1.55f };
+          var rows = new List<float>{ PlayBottom + 0.3f, PlayBottom + 1.1f };
           if (t.sweepCeiling){ rows.Add(PlayTop - 0.75f); rows.Add(PlayTop); }
           int n = Mathf.Max(1, Mathf.RoundToInt(t.sweepDuration / SweepInterval));
           foreach (var y in rows)
