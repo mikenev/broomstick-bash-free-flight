@@ -24,6 +24,7 @@ namespace BroomstickBash {
     // Broom wind tuning (audio only; movement numbers live in MovementConfig)
     public const float WindMaxVolume = 0.8f, WindMinPitch = 0.8f, WindMaxPitch = 1.3f, WindSmoothTime = 0.15f;
     public const float WhooshTurnRate = 60f, WhooshMinSpeed01 = 0.2f, WhooshCooldown = 0.35f, WhooshVolume = 0.5f;
+    public const float WhooshBridgeTime = 0.2f;   // a stop shorter than this still counts as one turn (reversals); longer = a fresh start, no whoosh
     AudioSource wind; float windSpeed01, lastHeading, lastMovingTime = -1f, lastWhoosh = -99f; bool hadHeading;
     public float WindVolume => wind ? wind.volume : 0f;
     public float WindPitch => wind ? wind.pitch : 1f;
@@ -126,7 +127,7 @@ namespace BroomstickBash {
       if (hadHeading){
         float span = Mathf.Max(now - lastMovingTime, 1e-3f);
         float rate = Mathf.Abs(Mathf.DeltaAngle(lastHeading, heading)) / span;
-        if (span < 0.5f && rate > WhooshTurnRate && Time.unscaledTime - lastWhoosh >= WhooshCooldown && turnWhoosh){
+        if (span < WhooshBridgeTime && rate > WhooshTurnRate && Time.unscaledTime - lastWhoosh >= WhooshCooldown && turnWhoosh){
           lastWhoosh = Time.unscaledTime; Whooshes++;
           sfx.PlayOneShot(turnWhoosh, WhooshVolume * raw * sfxVolume);
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
