@@ -5,8 +5,10 @@ using BroomstickBash.Art;
 using UnityEngine.InputSystem;
 #endif
 namespace BroomstickBash {
-  /// <summary>Werewolf boss: hovers/leaps at the right of the screen, throws telegraphed fireball patterns that ramp
-  /// through 3 phases as HP drops. Every pattern is checked by FairnessValidator before it is committed.
+  /// <summary>Werewolf boss: hovers/bobs at the right of the screen, throws telegraphed fireball patterns that ramp
+  /// through 3 phases as HP drops (FF3: Fan / Wall / Burst / Beam / Sweep, see FireballPatterns + BossTuning). Every
+  /// pattern is checked against the free-flight model (FairnessValidator, MovementConfig) together with the fireballs
+  /// still in the air before it is committed. Planning works in the scroll-anchor frame (x relative to the witch's TrackX).
   /// Art swap point: assign <see cref="visualPrefab"/> (Art Dev's werewolf) and the gray-box child "GrayBox" is hidden.</summary>
   public class Werewolf : MonoBehaviour {
     enum Mode { Entering, Idle, Telegraph, Defeated }
@@ -16,9 +18,13 @@ namespace BroomstickBash {
     [Header("Refs")] public Transform cam, player;
     [Header("Stats")] public int maxHp = 12;
     public float entryGrace = 2.5f;               // witch invulnerable + no attacks after boss entry
+    /// <summary>FF3: after each hit the werewolf shrugs off spells for HitCooldown s (PhaseRoar after a phase change), so
+    /// nonstop casting can't burst him down before his attacks punish a camper: 12 hits take >= ~18 s.</summary>
+    public const float HitCooldown = 1.1f, PhaseRoar = 1.5f;
+    float hitCool;
     public float minSpawnDistance = 6f;           // fireballs never spawn closer than this to the witch
     public float phase2Hp = 8, phase3Hp = 4;      // HP thresholds (<=)
-    public PhaseTuning[] phases = DefaultPhases();
+    [System.NonSerialized] public PhaseTuning[] phases = BossTuning.DefaultPhases();   // code is the source of truth
     public int Hp { get; private set; }
     public int Phase => Hp > phase2Hp ? 0 : Hp > phase3Hp ? 1 : 2;
     public bool Defeated => mode == Mode.Defeated;
@@ -29,11 +35,11 @@ namespace BroomstickBash {
     static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
     PlayerController pc;
 
-    public static PhaseTuning[] DefaultPhases() => new[]{
-      new PhaseTuning{ fireballSpeed = 3.6f, telegraph = 1.5f, rest = 1.8f, wallGap = 3.8f, aimedCount = 1, arcCount = 2, attacks = new[]{ AttackKind.Aimed, AttackKind.Wall } },
-      new PhaseTuning{ fireballSpeed = 4.2f, telegraph = 1.3f, rest = 1.5f, wallGap = 3.4f, aimedCount = 2, aimedSpreadDeg = 18f, arcCount = 2, attacks = new[]{ AttackKind.Aimed, AttackKind.Arc, AttackKind.Wall } },
-      new PhaseTuning{ fireballSpeed = 4.8f, telegraph = 1.1f, rest = 1.2f, wallGap = 3.0f, aimedCount = 3, aimedSpreadDeg = 22f, arcCount = 3, attacks = new[]{ AttackKind.Wall, AttackKind.Aimed, AttackKind.Arc } },
-    };
+    public static PhaseTuning[] DefaultPhases() => BossTuning.DefaultPhases();
+    /// <summary>Dev autopilot: the committed attack and seconds until it fires (null when not telegraphing).</summary>
+    public List<Shot> PlannedShots => mode == Mode.Telegraph ? planned : null;
+    public float TelegraphLeft => mode == Mode.Telegraph ? Mathf.Max(0f, timer) : 0f;
+    public float ChestY => transform.position.y + 0.2f;
 
     void Awake(){
       mpb = new MaterialPropertyBlock();
@@ -49,11 +55,12 @@ namespace BroomstickBash {
       rends = GetComponentsInChildren<Renderer>(false);
       pc = player ? player.GetComponent<PlayerController>() : null;
     }
-    void OnDisable(){ ClearTells(); }
+    void OnDisable(){ ClearTells(); pendingShots.Clear(); }
 
     public void Begin(){
       gameObject.SetActive(true);
-      Hp = maxHp; t = 0; mode = Mode.Entering; timer = entryGrace; attackIdx = 0; flash = 0; defeatT = 0;
+      pendingShots.Clear();
+      Hp = maxHp; t = 0; hitCool = 0; mode = Mode.Entering; timer = entryGrace; attackIdx = 0; flash = 0; defeatT = 0;
       transform.position = new Vector3(cam.position.x + 16f, 5f, 0); transform.rotation = Quaternion.identity; transform.localScale = Vector3.one;
       SetTint(null); foreach (var r in rends) if (r) r.enabled = true;
       if (anim){ anim.Rebind(); anim.Update(0f); }
@@ -63,14 +70,15 @@ namespace BroomstickBash {
     float TargetX => cam.position.x + 7.5f;
     void Update(){
       var gm = GameManager.I; if (!gm || !gm.IsActive) return;
-      float dt = Time.deltaTime; t += dt; if (immuneCue > 0) immuneCue -= dt;
+      float dt = Time.deltaTime; t += dt; if (immuneCue > 0) immuneCue -= dt; if (hitCool > 0) hitCool -= dt;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
       if (Keyboard.current != null && Keyboard.current.kKey.wasPressedThisFrame) Damage(1);   // dev-only QA: auto-hit
 #endif
       if (mode == Mode.Defeated){ DefeatTick(dt); return; }
+      TickPending(dt);
       var p = transform.position;
       p.x = Mathf.Max(Mathf.MoveTowards(p.x, TargetX, (gm.ScrollSpeed + 6f) * dt), TargetX);
-      float bobAmp = mode == Mode.Telegraph ? 0.3f : 2.6f;      // holds (mostly) still while winding up
+      float bobAmp = mode == Mode.Telegraph ? 0.3f : BossTuning.BobAmp(Phase);   // holds (mostly) still while winding up
       p.y = Mathf.Lerp(p.y, 5f + Mathf.Sin(t * 0.9f) * bobAmp, 3f * dt);
       transform.position = p;
 
@@ -84,36 +92,54 @@ namespace BroomstickBash {
     }
 
     PhaseTuning Tuning => phases[Mathf.Clamp(Phase, 0, phases.Length - 1)];
-    Color TellColor => pending == AttackKind.Wall ? new Color(1f, 0.85f, 0.2f) : pending == AttackKind.Arc ? new Color(1f, 0.4f, 0.9f) : new Color(1f, 0.3f, 0.2f);
-    Vector2 HandRel => (Vector2)(transform.position + new Vector3(-1.6f, 0.4f, 0) - player.position);
+    Color TellColor => pending switch {
+      AttackKind.Wall => new Color(1f, 0.85f, 0.2f), AttackKind.Beam => new Color(1f, 0.15f, 0.1f), AttackKind.Sweep => new Color(0.4f, 0.8f, 1f),
+      AttackKind.Burst => new Color(1f, 0.4f, 0.9f), _ => new Color(1f, 0.5f, 0.2f) };
+    /// <summary>Hand (thrown shots spawn here), scroll-anchor frame.</summary>
+    Vector2 Hand => new Vector2(transform.position.x - 1.6f - pc.TrackX, transform.position.y + 0.4f);
 
     void PlanAttack(){
-      var tun = Tuning; var m = FlapModel.From(pc, GameConfig.I);
-      float y = player.position.y, vy = pc.VelocityY; planY = y;
+      var tun = Tuning; var m = FlightModel.FromConfig();
       var order = tun.attacks; pending = order[attackIdx++ % order.Length];
-      // runtime fairness check, including fireballs still in the air (see FairnessValidator.PlanFair)
-      planned = FairnessValidator.PlanFair(ref pending, tun, HandRel, y, vy, LiveShots(), m, rng, minSpawnDistance, out int rej);
+      // runtime fairness check (free-flight model), including fireballs still in the air (see FairnessValidator.PlanFair)
+      planned = FairnessValidator.PlanFair(ref pending, tun, Hand, pc.Offset, ChestY, LiveShots(), m, rng, minSpawnDistance, out int rej);
       RejectedPatterns += rej;
       if (planned == null){ timer = tun.rest; return; }   // nothing fair right now: skip a beat
       mode = Mode.Telegraph; timer = tun.telegraph; committed = tun;   // phase can't change a committed attack
       SetTint(TellColor, TellBlend);
       SpawnTells();
       GameEvents.BossTelegraph?.Invoke(pending);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+      Debug.Log($"[Werewolf] plan {pending} phase {Phase} shots={planned.Count} rejectedVariants={rej} witch={pc.Offset} chest={ChestY:0.0}");
+#endif
     }
-    /// <summary>Fireballs already in the air, in the witch's frame (x and velocity relative to her, y absolute).</summary>
-    List<Shot> LiveShots(){
+    /// <summary>Fireballs already in the air, in the scroll-anchor frame (x and velocity relative to TrackX, y absolute).</summary>
+    public List<Shot> LiveShots(){
       var live = new List<Shot>(); float scroll = GameManager.I.ScrollSpeed;
       foreach (var f in FindObjectsByType<Fireball>(FindObjectsSortMode.None)){
         var p = f.transform.position;
-        live.Add(new Shot{ pos = new Vector2(p.x - player.position.x, p.y), vel = new Vector2(f.vel.x - scroll, f.vel.y), gravity = f.gravity, live = true });
+        live.Add(new Shot{ pos = new Vector2(p.x - pc.TrackX, p.y), vel = new Vector2(f.vel.x - scroll, f.vel.y), gravity = f.gravity, live = true });
       }
+      // stream / staggered shots of the previous attack that have not launched yet count too (they start at their spawn point)
+      foreach (var (q, left) in pendingShots) live.Add(new Shot{ pos = q.pos, vel = q.vel, gravity = q.gravity, delay = Mathf.Max(0f, left), live = true });
       return live;
     }
 
-    // Tell: glowing "ghost" orbs where each fireball will appear, growing through the wind-up; boss tints + crouches.
+    // Tell: glowing "ghost" orbs where the fireballs will appear (one per distinct spawn point), growing through the wind-up;
+    // streams (Beam / Sweep) also mark their whole lane across the screen. Boss tints + crouches.
+    readonly List<Vector2> tellPos = new();
     void SpawnTells(){
       ClearTells(); var cfg = GameConfig.I;
       foreach (var s in planned){
+        bool dup = false; foreach (var q in tellPos) if ((q - s.pos).sqrMagnitude < 0.09f){ dup = true; break; }
+        if (!dup) tellPos.Add(s.pos);
+      }
+      if (pending == AttackKind.Beam || pending == AttackKind.Sweep){
+        var rows = new List<float>();
+        foreach (var s in planned) if (Mathf.Abs(s.vel.y) < 0.01f && s.pos.x > 10f && !rows.Exists(r => Mathf.Abs(r - s.pos.y) < 0.2f)) rows.Add(s.pos.y);
+        foreach (var y in rows) for (float x = 9.5f; x > FairnessValidator.XMin - 2.5f; x -= 1.3f) tellPos.Add(new Vector2(x, y));
+      }
+      foreach (var _ in tellPos){
         var go = cfg.MakeBlock("Tell", cfg.sphere, cfg.sparkleMat, Vector3.zero, Vector3.one * 0.15f);
         go.transform.SetParent(transform.parent, true);
         tells.Add(go);
@@ -124,24 +150,21 @@ namespace BroomstickBash {
       transform.localScale = new Vector3(1f + 0.08f * k, 1f - 0.12f * k, 1f);
       // blink faster as it gets closer to firing
       bool on = Mathf.Repeat(t * (4f + 10f * k), 1f) < 0.6f;
-      for (int i = 0; i < tells.Count && i < planned.Count; i++){
+      for (int i = 0; i < tells.Count && i < tellPos.Count; i++){
         if (!tells[i]) continue;
-        // tells follow the witch's frame so they show exactly where the shot will start (shots are planned relative to her)
-        var s = planned[i]; tells[i].transform.position = new Vector3(player.position.x + s.pos.x, Mathf.Clamp(PlannedAbsY(s), -1, 11), -0.6f);
-        tells[i].transform.localScale = Vector3.one * Mathf.Lerp(0.15f, 0.55f, k);
+        // planned in the scroll-anchor frame, so the tells move with the screen and show exactly where shots start
+        var q = tellPos[i]; tells[i].transform.position = new Vector3(pc.TrackX + q.x, Mathf.Clamp(q.y, -1, 11), -0.6f);
+        tells[i].transform.localScale = Vector3.one * Mathf.Lerp(0.15f, q.x < 10f ? 0.3f : 0.55f, k);
         tells[i].SetActive(on || k > 0.85f);
       }
     }
-    float planY; float PlannedAbsY(Shot s) => planY + s.pos.y;
-    void ClearTells(){ foreach (var g in tells) if (g) Destroy(g); tells.Clear(); }
+    void ClearTells(){ foreach (var g in tells) if (g) Destroy(g); tells.Clear(); tellPos.Clear(); }
 
     void Fire(){
-      var cfg = GameConfig.I; var gm = GameManager.I;
-      float baseY = planY;
       foreach (var s in planned){
-        var at = new Vector3(player.position.x + s.pos.x, baseY + s.pos.y, 0);
+        var at = new Vector3(pc.TrackX + s.pos.x, s.pos.y, 0);
         if (Vector2.Distance(at, player.position) < minSpawnDistance) continue;   // hard guarantee, even if the witch moved
-        if (s.delay > 0){ StartCoroutine(Delayed(s, at)); continue; }
+        if (s.delay > 0){ pendingShots.Add((s, s.delay)); continue; }
         Spawn(s, at);
       }
       ClearTells(); SetTint(null); transform.localScale = Vector3.one;
@@ -149,11 +172,17 @@ namespace BroomstickBash {
       mode = Mode.Idle; timer = committed.rest; FiredPatterns++;
       GameEvents.BossFired?.Invoke();
     }
-    System.Collections.IEnumerator Delayed(Shot s, Vector3 at){
-      float d = s.delay; while (d > 0){ if (GameManager.I.IsActive) d -= Time.deltaTime; yield return null; }
-      if (mode == Mode.Defeated) yield break;
-      at = new Vector3(player.position.x + s.pos.x, at.y, 0);
-      if (Vector2.Distance(at, player.position) >= minSpawnDistance) Spawn(s, at);
+    /// <summary>Delayed shots (streams, staggered bursts) waiting to launch; also reported by LiveShots so the next plan
+    /// accounts for them. Ticked in Update (pauses with the game, cleared on Begin / defeat / disable).</summary>
+    readonly List<(Shot s, float left)> pendingShots = new();
+    void TickPending(float dt){
+      for (int i = pendingShots.Count - 1; i >= 0; i--){
+        var (q, left) = pendingShots[i]; left -= dt;
+        if (left > 0f){ pendingShots[i] = (q, left); continue; }
+        pendingShots.RemoveAt(i);
+        var at = new Vector3(pc.TrackX + q.pos.x, q.pos.y, 0);
+        if (Vector2.Distance(at, player.position) >= minSpawnDistance) Spawn(q, at);
+      }
     }
     void Spawn(Shot s, Vector3 at){
       var cfg = GameConfig.I;
@@ -165,20 +194,20 @@ namespace BroomstickBash {
     }
 
     public void Damage(int n){
-      if (mode == Mode.Entering){ Fizzle(); return; }       // entry/grace: immune, but show it
+      if (mode == Mode.Entering || (hitCool > 0 && mode != Mode.Defeated && Hp > 0)){ Fizzle(); return; }   // entry grace / hit cooldown: immune, but show it
       if (Hp <= 0 || mode == Mode.Defeated) return;
       int before = Phase;
-      Hp -= n; flash = 0.1f; SetTint(Color.white, 0.8f);
+      Hp -= n; hitCool = HitCooldown; flash = 0.1f; SetTint(Color.white, 0.8f);
       Puff.Burst(transform.position + Vector3.left, GameConfig.I.sparkleMat, 6);
       if (art && Hp > 0) BroomArt.Trigger(art, "Hurt");
       GameEvents.BossHurt?.Invoke(Hp);
       if (Hp <= 0){ StartDefeat(); return; }
-      if (Phase != before){ Puff.Burst(transform.position, GameConfig.I.fireMat, 14, 0.25f, 6f); GameEvents.BossPhaseChanged?.Invoke(Phase); }
+      if (Phase != before){ hitCool = PhaseRoar; Puff.Burst(transform.position, GameConfig.I.fireMat, 14, 0.25f, 6f); GameEvents.BossPhaseChanged?.Invoke(Phase); }
     }
 
     // Defeat: stagger/shake 1.1 s → topple and fall 0.9 s → poof → 1 s pause → win screen.
     void StartDefeat(){
-      mode = Mode.Defeated; defeatT = 0; poofed = false; ClearTells(); StopAllCoroutines(); SetTint(Color.white, 0.8f);
+      mode = Mode.Defeated; defeatT = 0; poofed = false; ClearTells(); pendingShots.Clear(); SetTint(Color.white, 0.8f);
       foreach (var f in FindObjectsByType<Fireball>(FindObjectsSortMode.None)) Destroy(f.gameObject);
       if (pc) pc.GrantInvulnerability(5f);
       if (art) BroomArt.Trigger(art, "Defeat");

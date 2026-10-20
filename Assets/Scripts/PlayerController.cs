@@ -4,8 +4,10 @@ namespace BroomstickBash {
   /// <summary>Witch: free-flight steering (see MovementConfig for the model), hearts, invulnerability flash, spell casting.
   /// Position = scroll anchor (trackX, advanced at the scroll speed, followed by the camera) + a steerable offset.</summary>
   public class PlayerController : MonoBehaviour {
-    public int maxHearts = MovementConfig.Hearts;
-    public float invulnTime = MovementConfig.InvulnTime, castCooldown = MovementConfig.CastCooldown;
+    // FF3 (b): read-only views of MovementConfig (no serialized copies a scene could override)
+    public int maxHearts => MovementConfig.Hearts;
+    public float invulnTime => MovementConfig.InvulnTime;
+    public float castCooldown => MovementConfig.CastCooldown;
     public int Hearts { get; private set; }
     public Vector2 Velocity => vel;          // m/s relative to the scroll anchor
     public float VelocityY => vel.y;
@@ -17,7 +19,7 @@ namespace BroomstickBash {
 
     GameObject art;
     /// <summary>Seconds after start/restart during which bouncing off the street is free (no heart lost).</summary>
-    public float streetGrace = MovementConfig.StreetGrace; float grace;
+    public float streetGrace => MovementConfig.StreetGrace; float grace, kick;
     void Awake(){
       // M2 art: BA_Witch (origin = broom handle; gray-box broom sits at y -0.3). The hurt flash toggles only the art renderers
       // when art is present, so the hidden gray-box never reappears; falls back to the gray-box renderers otherwise.
@@ -27,7 +29,7 @@ namespace BroomstickBash {
     }
     public void StartGrace(){ grace = streetGrace; }
     public void ResetPlayer(){
-      Hearts = maxHearts; vel = Vector2.zero; invuln = 0; cool = 0; grace = streetGrace;
+      Hearts = maxHearts; vel = Vector2.zero; invuln = 0; cool = 0; grace = streetGrace; kick = 0;
       trackX = 0f; offset = new Vector2(MovementConfig.StartOffsetX, MovementConfig.StartY);
       transform.position = new Vector3(trackX + offset.x, offset.y, 0); transform.rotation = Quaternion.identity; SetVisible(true);
     }
@@ -40,8 +42,10 @@ namespace BroomstickBash {
       if (FlightInput.CastPressed() && cool <= 0) CastSpell();
       // input -> velocity (accel/decel smoothing) -> offset; never sets position from input directly
       Vector2 wish = FlightInput.Move() * MovementConfig.MaxSpeed;
+      if (kick > 0){ kick -= dt; wish.y = Mathf.Max(wish.y, 0f); }        // FF3 (c): street kick-up holds; down input ignored
       float rate = wish.sqrMagnitude > 0.0001f ? MovementConfig.AccelRate : MovementConfig.DecelRate;
       vel = Vector2.MoveTowards(vel, wish, rate * dt);
+      if (kick > 0) vel.y = Mathf.Max(vel.y, MovementConfig.StreetBounceSpeed);
       offset += vel * dt;
       if (!cam) cam = Camera.main;
       var hb = MovementConfig.HorizontalBounds(cam);
@@ -51,7 +55,7 @@ namespace BroomstickBash {
       if (offset.y < MovementConfig.BottomY){
         offset.y = MovementConfig.BottomY;
         if (grace <= 0) Hit();                                   // street contact costs a heart (grace + invuln apply)
-        vel.y = MovementConfig.StreetBounceSpeed;
+        vel.y = MovementConfig.StreetBounceSpeed; kick = MovementConfig.StreetKickTime;
       }
       trackX += scroll * dt;
       transform.position = new Vector3(trackX + offset.x, offset.y, 0);

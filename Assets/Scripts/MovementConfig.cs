@@ -9,7 +9,8 @@ namespace BroomstickBash {
   ///   velocity = Vector2.MoveTowards(velocity, wish, rate * dt)                   (input drives velocity, never position)
   ///   offset  += velocity * dt;   world.x = trackX + offset.x;  trackX += scrollSpeed * dt (camera follows trackX)
   ///   clamp:  offset.x to HorizontalBounds, y to [BottomY, TopY]; hitting a bound zeroes velocity into that bound.
-  ///   street: reaching BottomY costs a heart (unless in StreetGrace or invulnerable) and kicks velocity.y to +StreetBounceSpeed.
+  ///   street: reaching BottomY costs a heart (unless in StreetGrace or invulnerable) and kicks velocity.y to +StreetBounceSpeed,
+  ///           held for StreetKickTime (down input ignored meanwhile) so holding down can't pin her to the street.
   /// So: full speed reached in 0.12 s over 0.42 m; from full speed to a stop in 0.12 s / 0.42 m.</summary>
   public static class MovementConfig {
     // --- speed / smoothing ---
@@ -24,6 +25,7 @@ namespace BroomstickBash {
     public const float TopY = 9.6f;              // ceiling clamp (no damage)
     public const float StreetBounceSpeed = 4f;   // m/s upward kick after touching the street
     public const float StreetGrace = 1.25f;      // s after start/restart where street contact is free
+    public const float StreetKickTime = 0.35f;   // s the upward kick is held after street contact (~1.4 m rise)
 
     // --- horizontal bounds (offset from the scroll anchor trackX; the camera centre is trackX + CameraLead) ---
     public const float CameraLead = 5f;          // must match SideCamera.lead
