@@ -108,7 +108,7 @@ namespace BroomstickBash {
       GUI.color = ready ? new Color(0, 0, 0, 0.6f) : new Color(0.35f, 0.05f, 0.05f, 0.95f); GUI.DrawTexture(bar, white);
       GUI.color = ready ? new Color(0.6f, 1f, 0.4f) : new Color(1f, 0.75f, 0.25f); GUI.DrawTexture(new Rect(bar.x, bar.y, bar.width * frac, bar.height), white);
       GUI.color = Color.white;
-      GUI.Label(new Rect(285*s, 118*s, 420*s, 34*s), ready ? "READY (X / F / right-click)" : "RECHARGING...", small);
+      GUI.Label(new Rect(285*s, 118*s, 420*s, 34*s), ready ? (Touch ? "READY (CAST button)" : "READY (X / F / J / Enter / click)") : "RECHARGING...", small);
       if (State == GameState.Boss){
         float w = 400 * s, x = (Screen.width - w) / 2;
         GUI.color = new Color(0, 0, 0, 0.6f); GUI.DrawTexture(new Rect(x, 20*s, w, 22*s), white);
