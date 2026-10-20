@@ -196,10 +196,11 @@ public static class BuildWeb {
   }
 
   /// <summary>Max vertical distance covered in T seconds starting and ending at rest, by simulating PlayerController's
-  /// per-frame velocity update (MoveTowards toward wish at AccelRate/DecelRate) at 60 fps. Independent of LevelPlanner.Reach.</summary>
+  /// per-frame velocity update (MoveTowards toward wish at AccelRate/DecelRate) at a pessimistic 30 fps (WebGL on slow
+  /// devices; at 60 fps she covers more). Independent of LevelPlanner.Reach.</summary>
   static float SimReach(float T){
     T -= LevelPlanner.Reaction; if (T <= 0) return 0;
-    const float dt = 1f / 60f; int n = Mathf.FloorToInt(T / dt); float best = 0;
+    const float dt = 1f / 30f; int n = Mathf.FloorToInt(T / dt + 1e-4f); float best = 0;
     for (int brake = 0; brake <= n; brake++){            // full input for 'brake' frames, then release
       float y = 0, v = 0;
       for (int i = 0; i < n; i++){

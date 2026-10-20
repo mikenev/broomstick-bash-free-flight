@@ -57,6 +57,7 @@ namespace BroomstickBash {
     public const float SpawnAhead = 15f;
     public const float HomeTime = 0.9f;                                        // flyers reach targetY within this
     public const float Reaction = 0.15f;                                       // s subtracted from every transition
+    public const float FrameSlack = 1f / 15f;                                  // s lost to per-frame velocity steps at >= 30 fps
     public const float MinMultiSpacing = 0.9f, MinSingleInterval = 0.7f;
     public const float KidGap = 2.6f;                                          // kids always get a clear lane
     // witch x offset range (world x - trackX), conservative over aspect ratios: max is < CameraLead for any aspect
@@ -65,9 +66,10 @@ namespace BroomstickBash {
     public static float MinGap(float d) => Mathf.Lerp(3.0f, 1.8f, d);
     public static float MinWindow(float d, bool kid) => Mathf.Max(MinGap(d), kid ? KidGap : 0f) - PlayerExtent;
 
-    /// <summary>Max vertical distance the witch surely covers in t seconds, starting and ending at rest (free-flight model).</summary>
+    /// <summary>Max vertical distance the witch surely covers in t seconds, starting and ending at rest (free-flight model:
+    /// continuous accel/brake at AccelRate up to MaxSpeed, minus a reaction margin and the frame-step loss at 30 fps).</summary>
     public static float Reach(float t){
-      t -= Reaction; if (t <= 0) return 0;
+      t -= Reaction + FrameSlack; if (t <= 0) return 0;
       float ta = MovementConfig.AccelTime, v = MovementConfig.MaxSpeed;
       return t <= 2 * ta ? MovementConfig.AccelRate * t * t / 4f : v * (t - ta);
     }
