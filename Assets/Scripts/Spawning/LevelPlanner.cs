@@ -15,7 +15,7 @@ namespace BroomstickBash {
     /// <summary>Half width along x (for timing the passage), without dx.</summary>
     public float HalfWidth => kind switch {
       ObstacleKind.Car => 1.6f, ObstacleKind.Kid => 0.55f, ObstacleKind.LampPost => LevelPlanner.LampHeadR,
-      ObstacleKind.Branch => 0.4f + 0.21f * size, ObstacleKind.Bat => 0.65f, ObstacleKind.Ghost => 0.45f, _ => 1f };
+      ObstacleKind.Branch => 0.4f + 0.21f * size, ObstacleKind.Bat => 0.7f, ObstacleKind.Ghost => 0.45f, _ => 1f };
     /// <summary>Vertical band this item occupies while it can be near the witch (world y), incl. motion, rotation and bob.
     /// Flyers have finished homing by then (checked by the validator), so only the band around targetY counts.</summary>
     public Vector2 Envelope(float groundY, float ceilingY){
