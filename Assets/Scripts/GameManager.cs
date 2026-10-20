@@ -46,13 +46,13 @@ namespace BroomstickBash {
     }
     public void GameOver(){ if (!IsActive) return; State = GameState.GameOver; End(); GameEvents.GameOver?.Invoke(); GameEvents.RunEnded?.Invoke(false, Score); }
     public void Win(){ if (State != GameState.Boss) return; KillScore += 500; State = GameState.Win; End(); GameEvents.Won?.Invoke(Score); GameEvents.RunEnded?.Invoke(true, Score); }
-    /// <summary>Restart from game over / win straight into a new run. FF3 (a): needs a DELIBERATE input (Enter / Space / R,
-    /// or a tap that isn't on the CAST button) after RestartDelay, so mashing cast (X/F/J/click) can't skip the score screen.</summary>
+    /// <summary>Restart from game over / win straight into a new run. FF3 (a): needs a DELIBERATE input (Space / R,
+    /// or a tap that isn't on the CAST button) after RestartDelay, so mashing cast (X/F/J/Enter/click) can't skip the score screen.</summary>
     public const float RestartDelay = 1.2f;
     bool RestartReady => Time.unscaledTime - endTime > RestartDelay;
     static bool RestartPressed(){
       var kb = Keyboard.current;
-      if (kb != null && (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame || kb.spaceKey.wasPressedThisFrame || kb.rKey.wasPressedThisFrame)) return true;
+      if (kb != null && (kb.spaceKey.wasPressedThisFrame || kb.rKey.wasPressedThisFrame)) return true;
       var ts = Touchscreen.current;
       return ts != null && ts.primaryTouch.press.wasPressedThisFrame && !(TouchControls.I && TouchControls.I.CastPressedThisFrame);
     }
@@ -81,7 +81,7 @@ namespace BroomstickBash {
       }
     }
 
-    GUIStyle big, small; Texture2D white;
+    GUIStyle big, small, hud; Texture2D white;
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
     const string DebugHint = "B: skip to boss (dev build)     ";
 #else
@@ -91,34 +91,47 @@ namespace BroomstickBash {
     static string ControlHint => Touch
       ? "Drag on the left half to steer (the stick appears under your thumb)     Tap CAST (bottom right) to cast a spell"
       : "Arrows / WASD: fly (8 directions)     X / F / J / Enter / left-click: cast spell";
-    string RestartHint => !RestartReady ? " " : Touch ? "Tap" : "Press Enter or Space";
+    string RestartHint => !RestartReady ? " " : Touch ? "Tap" : "Press Space or R";
     void OnGUI(){
       float s = Screen.height / 720f;
       if (!white){ white = Texture2D.whiteTexture; }
       big ??= new GUIStyle(GUI.skin.label){ alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold, richText = true };
       small ??= new GUIStyle(GUI.skin.label){ fontStyle = FontStyle.Bold };
       big.fontSize = Mathf.RoundToInt(46 * s); small.fontSize = Mathf.RoundToInt(24 * s);
-      // hearts
+      // FF2 HUD: one compact, semi-transparent panel in the top-RIGHT corner. The witch can never be drawn there: she is
+      // clamped to the left ScreenFractionX (45%) of the screen (MovementConfig), and the panel is kept right of 52% of the
+      // width, so free flight up to TopY can no longer put her behind the hearts/score (it did in the old top-left HUD).
+      float ps = Mathf.Min(s, Screen.width * 0.48f / 310f);            // shrink on narrow/portrait screens to stay right of 52%
+      float pw = 300 * ps, px = Screen.width - pw - 10 * ps, py = 10 * ps;
+      if (State == GameState.Boss && px < Screen.width / 2f + 205 * s) py = 80 * s; // keep clear of the centred boss bar
+      hud ??= new GUIStyle(GUI.skin.label){ fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleLeft, wordWrap = false, clipping = TextClipping.Overflow };
+      hud.fontSize = Mathf.RoundToInt(19 * ps);
+      string line1 = $"Score {Score}   Best {HighScore}", line2 = $"{Mathf.FloorToInt(Distance)} m + {Kills} spooks";
+      // never clip: shrink the font if the longer line would not fit the panel (big scores / narrow screens)
+      float avail = pw - 20 * ps;
+      while (hud.fontSize > 9 && Mathf.Max(hud.CalcSize(new GUIContent(line1)).x, hud.CalcSize(new GUIContent(line2)).x) > avail) hud.fontSize--;
+      GUI.color = new Color(0, 0, 0, 0.45f); GUI.DrawTexture(new Rect(px, py, pw, 112 * ps), white);
+      float ix = px + 10 * ps;
       for (int i = 0; i < player.maxHearts; i++){
         GUI.color = i < player.Hearts ? new Color(0.9f, 0.15f, 0.2f) : new Color(0.25f, 0.25f, 0.25f, 0.7f);
-        GUI.DrawTexture(new Rect((20 + i * 42) * s, 18 * s, 32 * s, 32 * s), white);
+        GUI.DrawTexture(new Rect(ix + i * 30 * ps, py + 8 * ps, 24 * ps, 24 * ps), white);
       }
       GUI.color = Color.white;
-      GUI.Label(new Rect(20*s, 58*s, 700*s, 34*s), $"Score: {Score}   ({Mathf.FloorToInt(Distance)} m + {Kills} spooks)", small);
-      GUI.Label(new Rect(20*s, 88*s, 700*s, 34*s), $"Best: {HighScore}", small);
+      GUI.Label(new Rect(ix, py + 34 * ps, avail, 24 * ps), line1, hud);
+      GUI.Label(new Rect(ix, py + 56 * ps, avail, 24 * ps), line2, hud);
       // spell cooldown meter
       float frac = player.castCooldown > 0 ? 1f - Mathf.Clamp01(player.CooldownLeft / player.castCooldown) : 1f;
-      GUI.Label(new Rect(20*s, 118*s, 120*s, 34*s), "Spell", small);
       bool ready = frac >= 1f;
-      var bar = new Rect(95*s, 124*s, 180*s, 20*s);
+      GUI.Label(new Rect(ix, py + 82 * ps, 60 * ps, 24 * ps), "Spell", hud);
+      var bar = new Rect(ix + 58 * ps, py + 87 * ps, 110 * ps, 14 * ps);
       if (!ready){ // drained: pulsing red outline + red track so it reads at a glance
         GUI.color = Color.Lerp(new Color(1f, 0.15f, 0.1f), new Color(1f, 0.6f, 0.2f), Mathf.PingPong(Time.unscaledTime * 6f, 1f));
-        GUI.DrawTexture(new Rect(bar.x - 3*s, bar.y - 3*s, bar.width + 6*s, bar.height + 6*s), white);
+        GUI.DrawTexture(new Rect(bar.x - 2*ps, bar.y - 2*ps, bar.width + 4*ps, bar.height + 4*ps), white);
       }
       GUI.color = ready ? new Color(0, 0, 0, 0.6f) : new Color(0.35f, 0.05f, 0.05f, 0.95f); GUI.DrawTexture(bar, white);
       GUI.color = ready ? new Color(0.6f, 1f, 0.4f) : new Color(1f, 0.75f, 0.25f); GUI.DrawTexture(new Rect(bar.x, bar.y, bar.width * frac, bar.height), white);
       GUI.color = Color.white;
-      GUI.Label(new Rect(285*s, 118*s, 420*s, 34*s), ready ? (Touch ? "READY (CAST button)" : "READY (X / F / J / Enter / click)") : "RECHARGING...", small);
+      GUI.Label(new Rect(bar.xMax + 8 * ps, py + 82 * ps, pw - (bar.xMax - px) - 12 * ps, 24 * ps), ready ? "READY" : "...", hud);
       if (State == GameState.Boss){
         float w = 400 * s, x = (Screen.width - w) / 2;
         GUI.color = new Color(0, 0, 0, 0.6f); GUI.DrawTexture(new Rect(x, 20*s, w, 22*s), white);

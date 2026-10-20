@@ -53,6 +53,16 @@ namespace BroomstickBash {
       t.intervalByDifficulty = new AnimationCurve(new Keyframe(0, 1.9f), new Keyframe(0.5f, 1.25f), new Keyframe(1, 0.9f));
       t.bossDistance = 1150f; t.rampDistance = t.bossDistance * 0.85f; t.m2TuningVersion = 1;
     }
+    /// <summary>FF2 free-flight tuning (GameConfig.scrollSpeed base stays 6 m/s, which the boss uses unscaled):
+    /// street scroll 7 -> 9.5 m/s cap (multiplier 7/6 -> 9.5/6), spawn interval 1.6 -> 0.75 s (singles; multi-item
+    /// spawns are additionally kept >= 0.9 s apart by LevelPlanner). Same non-linear difficulty curve as M2.</summary>
+    public const float FF2ScrollMin = 7f, FF2ScrollMax = 9.5f, FF2BaseScroll = 6f;
+    public static void ApplyFF2(SpawnTable t){
+      ApplyM2Curve(t);
+      t.speedByDifficulty = new AnimationCurve(new Keyframe(0, FF2ScrollMin / FF2BaseScroll), new Keyframe(0.5f, 8.1f / FF2BaseScroll), new Keyframe(1, FF2ScrollMax / FF2BaseScroll));
+      t.intervalByDifficulty = new AnimationCurve(new Keyframe(0, 1.6f), new Keyframe(0.5f, 1.05f), new Keyframe(1, 0.75f));
+      t.m2TuningVersion = 2;
+    }
   }
   /// <summary>Difficulty hook: 0..1. Override via Spawner.difficultyOverride for testing or a custom curve.</summary>
   public interface IDifficultySource { float Difficulty { get; } }

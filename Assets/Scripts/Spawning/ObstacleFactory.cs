@@ -33,12 +33,12 @@ namespace BroomstickBash {
         case ObstacleKind.Ghost: {
           go = cfg.MakeBlock("Ghost", cfg.capsule, cfg.ghostMat, new Vector3(x, Y(e, cfg), 0), new Vector3(0.9f, 0.6f, 0.9f));
           go.AddComponent<CapsuleCollider>();
-          go.layer = Layers.Enemy; ob = go.AddComponent<Ghost>(); ob.speed = 1.2f; ob.hp = 2; ob.scoreValue = 25; break;
+          go.layer = Layers.Enemy; var lg = go.AddComponent<Ghost>(); lg.targetY = go.transform.position.y; ob = lg; ob.speed = 1.2f; ob.hp = 2; ob.scoreValue = 25; break;
         }
         default: {
           go = cfg.MakeBlock("Bat", cfg.cube, cfg.batMat, new Vector3(x, Y(e, cfg), 0), new Vector3(1.3f, 0.35f, 0.5f));
           go.AddComponent<BoxCollider>();
-          go.layer = Layers.Enemy; ob = go.AddComponent<Bat>(); ob.speed = 2.5f; ob.scoreValue = 15; break;
+          go.layer = Layers.Enemy; var lb = go.AddComponent<Bat>(); lb.targetY = go.transform.position.y; ob = lb; ob.speed = 2.5f; ob.scoreValue = 15; break;
         }
       }
       ob.kind = e.kind; return ob;
@@ -82,11 +82,11 @@ namespace BroomstickBash {
         }
         case ObstacleKind.Ghost: {
           go = cfg.MakeBlock("Ghost", cfg.capsule, cfg.ghostMat, new Vector3(x, p.y, 0), new Vector3(0.9f, 0.6f, 0.9f));
-          go.AddComponent<CapsuleCollider>(); go.layer = Layers.Enemy; var g = go.AddComponent<Ghost>(); g.amp = p.amp; ob = g; ob.hp = 2; ob.scoreValue = 25; break;
+          go.AddComponent<CapsuleCollider>(); go.layer = Layers.Enemy; var g = go.AddComponent<Ghost>(); g.amp = p.amp; g.targetY = p.targetY; ob = g; ob.hp = 2; ob.scoreValue = 25; break;
         }
         default: {
           go = cfg.MakeBlock("Bat", cfg.cube, cfg.batMat, new Vector3(x, p.y, 0), new Vector3(1.3f, 0.35f, 0.5f));
-          go.AddComponent<BoxCollider>(); go.layer = Layers.Enemy; var bt = go.AddComponent<Bat>(); bt.amp = p.amp; ob = bt; ob.scoreValue = 15; break;
+          go.AddComponent<BoxCollider>(); go.layer = Layers.Enemy; var bt = go.AddComponent<Bat>(); bt.amp = p.amp; bt.targetY = p.targetY; ob = bt; ob.scoreValue = 15; break;
         }
       }
       // Art: applied by BroomArtSkin (name-based, one instance per root). SpawnEntry.prefab is intentionally not used.
