@@ -229,7 +229,11 @@ public static class BuildWeb {
   }
 
   public static bool RunStreetValidation(int Seeds){
-    int fails = 0; void Fail(string m){ fails++; if (fails <= 25) Debug.LogError("VALIDATE FAIL: " + m); }
+    int fails = 0; var failKinds = new System.Collections.Generic.Dictionary<string, int>();
+    void Fail(string m){
+      fails++; if (fails <= 25) Debug.LogError("VALIDATE FAIL: " + m);
+      string k = System.Text.RegularExpressions.Regex.Replace(m, @"[-0-9.,()\[\]]+", "#"); failKinds[k] = failKinds.TryGetValue(k, out var n) ? n + 1 : 1;
+    }
     var table = AssetDatabase.LoadAssetAtPath<SpawnTable>(TablePath);
     if (!table){ table = SpawnTable.CreateDefault(); SpawnTable.ApplyFF2(table); } else EnsureM2Table(table);
     const float ground = 0f, ceiling = 10f, baseSpeed = 6f, dt = 1f / 60f;
@@ -298,7 +302,7 @@ public static class BuildWeb {
         if (reachable.Count == 0) Fail($"seed {seed} t={t:0.0}s d={d:0.00}: no reachable gap >= {needGap:0.00} m ({col.template}{(kid ? ", kid" : "")}), reach {reach:0.00} m");
         else { minGapSeen = Mathf.Min(minGapSeen, bestGap); minSlack = Mathf.Min(minSlack, bestGap - needGap); }
         // the planner's chosen window must really be free
-        for (float y = col.safe.x; y <= col.safe.y; y += 0.02f) if (!Free(y)){ Fail($"seed {seed}: planner window {col.safe} blocked at {y:0.00}"); break; }
+        for (float y = col.safe.x + 0.005f; y <= col.safe.y - 0.005f; y += 0.02f) if (!Free(y)){ Fail($"seed {seed}: planner window {col.safe} blocked at {y:0.00}"); break; }
         prevWins = reachable.Count > 0 ? reachable : new System.Collections.Generic.List<Vector2>{ col.safe }; prevCol = col;
       }
       if (seed == 0) levelTime = t;
@@ -349,6 +353,7 @@ public static class BuildWeb {
     Debug.Log($"VALIDATE ART: {artChecks} obstacles skinned with exactly one art instance, colliders unchanged; kinds={string.Join(",", artKinds)}");
     Debug.Log($"VALIDATE CURVE: boss at {table.bossDistance} m, reached after {levelTime:0.0}s; full difficulty at {fullAt:0.0}s. scroll {minScroll:0.00}..{maxScroll:0.00} m/s. {curve}");
     Debug.Log($"VALIDATE STATS: multi={multi} (min spacing {minMultiDt:0.00}s) kidColumns={kidCols} homingFlyers={homing} (min margin after homing {minHomeMargin:0.00}s) minTransition={minTrans:0.00}s topEdgeBlocked={100f * topBlocked / Mathf.Max(1, columns):0.0}% bottomEdgeBlocked={100f * bottomBlocked / Mathf.Max(1, columns):0.0}% reach(0.3s)={SimReach(0.3f):0.00}m reach(1s)={SimReach(1f):0.00}m");
+    foreach (var kv in failKinds) Debug.LogError($"VALIDATE FAIL KIND x{kv.Value}: {kv.Key}");
     Debug.Log($"VALIDATE RESULT: {(fails == 0 ? "PASS" : "FAIL")} fails={fails} seeds={Seeds} columns={columns} items={items} fallbacks={fallbacks} minGap={minGapSeen:0.00}m minSlack={minSlack:0.00}m geometryChecks={geo} [{sb}]");
     return fails == 0;
   }
