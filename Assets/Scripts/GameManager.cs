@@ -104,8 +104,12 @@ namespace BroomstickBash {
       float ps = Mathf.Min(s, Screen.width * 0.48f / 310f);            // shrink on narrow/portrait screens to stay right of 52%
       float pw = 300 * ps, px = Screen.width - pw - 10 * ps, py = 10 * ps;
       if (State == GameState.Boss && px < Screen.width / 2f + 205 * s) py = 80 * s; // keep clear of the centred boss bar
-      hud ??= new GUIStyle(GUI.skin.label){ fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleLeft };
+      hud ??= new GUIStyle(GUI.skin.label){ fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleLeft, wordWrap = false, clipping = TextClipping.Overflow };
       hud.fontSize = Mathf.RoundToInt(19 * ps);
+      string line1 = $"Score {Score}   Best {HighScore}", line2 = $"{Mathf.FloorToInt(Distance)} m + {Kills} spooks";
+      // never clip: shrink the font if the longer line would not fit the panel (big scores / narrow screens)
+      float avail = pw - 20 * ps;
+      while (hud.fontSize > 9 && Mathf.Max(hud.CalcSize(new GUIContent(line1)).x, hud.CalcSize(new GUIContent(line2)).x) > avail) hud.fontSize--;
       GUI.color = new Color(0, 0, 0, 0.45f); GUI.DrawTexture(new Rect(px, py, pw, 112 * ps), white);
       float ix = px + 10 * ps;
       for (int i = 0; i < player.maxHearts; i++){
@@ -113,8 +117,8 @@ namespace BroomstickBash {
         GUI.DrawTexture(new Rect(ix + i * 30 * ps, py + 8 * ps, 24 * ps, 24 * ps), white);
       }
       GUI.color = Color.white;
-      GUI.Label(new Rect(ix, py + 34 * ps, pw - 20 * ps, 24 * ps), $"Score {Score}  ({Mathf.FloorToInt(Distance)} m + {Kills} spooks)", hud);
-      GUI.Label(new Rect(ix, py + 56 * ps, pw - 20 * ps, 24 * ps), $"Best {HighScore}", hud);
+      GUI.Label(new Rect(ix, py + 34 * ps, avail, 24 * ps), line1, hud);
+      GUI.Label(new Rect(ix, py + 56 * ps, avail, 24 * ps), line2, hud);
       // spell cooldown meter
       float frac = player.castCooldown > 0 ? 1f - Mathf.Clamp01(player.CooldownLeft / player.castCooldown) : 1f;
       bool ready = frac >= 1f;
