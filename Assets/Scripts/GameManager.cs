@@ -78,7 +78,7 @@ namespace BroomstickBash {
 #else
     const string DebugHint = "";
 #endif
-    static bool Touch => TouchControls.I ? TouchControls.I.Visible : UnityEngine.InputSystem.Touchscreen.current != null;
+    static bool Touch => TouchControls.I ? TouchControls.I.Visible : Application.isMobilePlatform;
     static string ControlHint => Touch
       ? "Drag on the left half to steer (the stick appears under your thumb)     Tap CAST (bottom right) to cast a spell"
       : "Arrows / WASD: fly (8 directions)     X / F / J / Enter / left-click: cast spell";
