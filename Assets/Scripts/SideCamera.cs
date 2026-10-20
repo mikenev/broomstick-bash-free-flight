@@ -6,7 +6,7 @@ namespace BroomstickBash {
     void LateUpdate(){
       if (!target) return;
       float y = height + (target.position.y - height) * yFollow;
-      if (!pc) pc = target.GetComponent<PlayerController>();
+      if (!pc) pc = target.GetComponentInParent<PlayerController>();
       float ax = pc ? pc.TrackX : target.position.x;            // free flight: follow the scroll anchor, not the witch
       transform.position = new Vector3(ax + lead, y, -distance);
       transform.rotation = Quaternion.Euler(2f, 0, 0);

@@ -17,6 +17,7 @@ namespace BroomstickBash {
       GameEvents.Won += _ => Debug.Log($"[QA] WIN minFireballSpawnDist={minFireballDist:0.00} fired={Werewolf.FiredPatterns} rejected={Werewolf.RejectedPatterns}");
       GameEvents.GameOver += () => Debug.Log($"[QA] GAME OVER minFireballSpawnDist={minFireballDist:0.00}");
     }
+    void OnDisable(){ FlightInput.DebugOverride = null; }
     void Update(){
       var gm = GameManager.I; if (!gm) return;
       if (Keyboard.current != null && Keyboard.current.pKey.wasPressedThisFrame){ auto = !auto; Debug.Log($"[QA] autopilot {auto}"); }

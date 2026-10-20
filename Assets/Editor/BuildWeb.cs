@@ -298,9 +298,10 @@ public static class BuildWeb {
   ['gesturestart','gesturechange','gestureend','dblclick','contextmenu'].forEach(function(t){ c.addEventListener(t,stop,{passive:false}); });
   document.addEventListener('contextmenu',function(e){ if(e.target===c) e.preventDefault(); });
   window.addEventListener('keydown',function(e){
-    var k=e.key, tag=(e.target&&e.target.tagName)||'';
+    var k=e.key||'', tag=(e.target&&e.target.tagName)||'';
     if((k===' '||k==='Spacebar'||k.indexOf('Arrow')===0) && !/INPUT|TEXTAREA|SELECT/.test(tag)) e.preventDefault();
   },{passive:false});
+  if(!c.hasAttribute('tabindex')) c.setAttribute('tabindex','-1');
   c.addEventListener('pointerdown',function(){ try{ c.focus(); }catch(_){} });
 })();</script>";
     html = html.Replace("</head>", css + "\n  </head>").Replace("</body>", js + "\n  </body>");

@@ -5,18 +5,20 @@ namespace BroomstickBash {
   /// <summary>Mobile controls: a floating virtual thumbstick anchored where the first touch lands in the LEFT half of the
   /// screen (drag = direction, capped at StickRadiusPx; releasing returns input to zero so the witch decelerates), and a
   /// cast button at the bottom-right. Shown once a touch is seen (or a touchscreen is present). Drawn with IMGUI.</summary>
+  [DefaultExecutionOrder(-100)]   // read touches before GameManager/PlayerController consume Stick / CastPressedThisFrame
   public class TouchControls : MonoBehaviour {
     public static TouchControls I;
     public Vector2 Stick { get; private set; }
     public bool CastPressedThisFrame { get; private set; }
-    public bool Visible => seenTouch || Touchscreen.current != null;
+    public bool Visible => seenTouch || Application.isMobilePlatform;   // touch laptops show keyboard hints until actually touched
     public static float LastTouchTime = -99f;
     public static bool RecentTouch => Time.unscaledTime - LastTouchTime < 0.8f;
-    int stickId = -1; Vector2 anchor, knob; bool seenTouch, castHeld; Texture2D disc;
+    int stickId = -1; Vector2 anchor, knob; bool seenTouch, castHeld; Texture2D disc; GUIStyle st; int stSize;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Boot(){ if (!I) DontDestroyOnLoad(new GameObject("TouchControls").AddComponent<TouchControls>().gameObject); }
     void Awake(){ I = this; disc = MakeDisc(64); }
+    void OnDestroy(){ if (disc) Destroy(disc); if (I == this) I = null; }
 
     float Scale => Screen.height / 720f;
     Vector2 CastCenter => new Vector2(Screen.width - (MovementConfig.CastButtonMarginPx + MovementConfig.CastButtonRadiusPx) * Scale,
@@ -59,7 +61,8 @@ namespace BroomstickBash {
       }
       float cr = MovementConfig.CastButtonRadiusPx * sc;
       Disc(CastCenter, cr, castHeld ? new Color(0.6f, 1f, 0.4f, 0.75f) : new Color(0.6f, 1f, 0.4f, 0.4f));
-      var st = new GUIStyle(GUI.skin.label){ alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold, fontSize = Mathf.RoundToInt(22 * sc) };
+      int fs = Mathf.RoundToInt(22 * sc);
+      if (st == null || stSize != fs){ st = new GUIStyle(GUI.skin.label){ alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold, fontSize = fs }; stSize = fs; }
       var c = CastCenter; GUI.Label(new Rect(c.x - cr, Screen.height - c.y - cr, cr * 2, cr * 2), "CAST", st);
     }
     void Disc(Vector2 screenPos, float radius, Color col){
