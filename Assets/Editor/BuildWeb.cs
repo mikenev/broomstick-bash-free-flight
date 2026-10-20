@@ -117,6 +117,7 @@ public static class BuildWeb {
     AudioClip Clip(string n){ var c = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/" + n); if (!c) Debug.LogWarning("[Audio] missing clip " + n); return c; }
     ga.mainTheme = Clip("Music/main_theme_loop.ogg"); ga.bossTheme = Clip("Music/boss_theme_loop.ogg");
     ga.titleSting = Clip("Music/title_sting.ogg"); ga.gameOverSting = Clip("Music/gameover_sting.ogg"); ga.victorySting = Clip("Music/victory_sting.ogg");
+    ga.windLoop = Clip("SFX/broom_wind_loop.ogg"); ga.turnWhoosh = Clip("SFX/broom_turn_whoosh.ogg");   // Free Flight broom wind
     ga.cast = Clip("SFX/spell_cast.ogg"); ga.spellHit = Clip("SFX/fireball_impact.ogg");   // non-lethal spell hit (lethal hits play enemy_pop)
     ga.sparkle = Clip("SFX/kid_sparkle.ogg"); ga.hurt = Clip("SFX/hit_ouch.ogg"); ga.honk = Clip("SFX/car_honk.ogg");
     ga.bat = Clip("SFX/bat_screech.ogg"); ga.ghost = Clip("SFX/ghost_wail.ogg"); ga.enemyPop = Clip("SFX/enemy_pop.ogg");
@@ -390,8 +391,7 @@ public static class BuildWeb {
   public static void Build(){
     int code = 1;
     try {
-      // TODO(FF3): the boss fairness sweep still models the OLD flap physics (FlapModel). It keeps passing (patterns are
-      // unchanged), so it stays as a regression gate until FF3 re-models it with MovementConfig's free-flight kinematics.
+      // FF3: boss fairness gate on the free-flight model (MovementConfig); fails the build on any unfair pattern.
       if (!BossFairnessTest.Run()) throw new System.Exception("Boss fairness sweep found unfair patterns; see [Fairness] warnings");
       // FF2 build gate: street fairness under the free-flight model (500 seeds)
       if (!RunStreetValidation(500)) throw new System.Exception("Street fairness validation failed; see VALIDATE FAIL errors");
