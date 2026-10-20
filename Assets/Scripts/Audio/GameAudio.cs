@@ -108,7 +108,7 @@ namespace BroomstickBash {
     /// silent outside an active run (title, game over, win) and while time is frozen. The whoosh fires when the heading
     /// turns faster than WhooshTurnRate deg/s while moving above WhooshMinSpeed01, at most once per WhooshCooldown s.</summary>
     void UpdateWind(){
-      if (!wind) return;
+      if (!wind || !Unlocked) return;   // never start audio before the WebGL autoplay unlock
       var pc = gm ? gm.player : null;
       bool live = pc && gm.IsActive && Time.timeScale > 0f;
       Vector2 v = live ? pc.Velocity : Vector2.zero;
@@ -117,11 +117,12 @@ namespace BroomstickBash {
       windSpeed01 = Mathf.Lerp(windSpeed01, raw, 1f - Mathf.Exp(-dt / WindSmoothTime));
       wind.volume = Mathf.Lerp(0f, WindMaxVolume, windSpeed01);
       wind.pitch = Mathf.Lerp(WindMinPitch, WindMaxPitch, windSpeed01);
-      if (windLoop && !wind.isPlaying){ wind.clip = windLoop; wind.Play(); }
+      if (live && windLoop && !wind.isPlaying){ wind.clip = windLoop; wind.Play(); }
+      else if (!live && wind.isPlaying && wind.volume <= 0.001f) wind.Stop();   // release the voice once faded out
       // turn whoosh: heading change rate, measured across brief stops so a direction reversal counts as a sharp turn
       if (!live){ hadHeading = false; return; }
       if (raw < WhooshMinSpeed01) return;
-      float heading = Mathf.Atan2(v.y, v.x) * Mathf.Rad2Deg, now = Time.time;
+      float heading = Mathf.Atan2(v.y, v.x) * Mathf.Rad2Deg, now = Time.unscaledTime;
       if (hadHeading){
         float span = Mathf.Max(now - lastMovingTime, 1e-3f);
         float rate = Mathf.Abs(Mathf.DeltaAngle(lastHeading, heading)) / span;
