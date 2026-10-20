@@ -190,6 +190,7 @@ namespace BroomstickBash {
       if (r < w1){
         int k = rng.Next(4); c.template = "single";
         if (k == 1 && W(ObstacleKind.Branch, d) <= 0) k = 0;
+        if (k == 3 && W(ObstacleKind.Bat, d) <= 0) k = 0;   // high bats respect the table's bat weight/minDifficulty
         c.items.Add(k == 0 ? Ground(d) : k == 1 ? Ceiling(d) : k == 2 ? Flyer(d, allowGhost, bot, top) : Flyer(d, false, 8.2f, 9.3f)); // k==3: high bat (top edge not safe)
         if (k == 3) c.template = "high-bat";
       } else if (r < w1 + w2){
