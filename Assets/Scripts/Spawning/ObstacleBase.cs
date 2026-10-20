@@ -34,22 +34,28 @@ namespace BroomstickBash {
     public void Despawn(){ OnDespawned(); Destroy(gameObject); }
   }
 
-  /// <summary>Swooping bat: dives from its base height by up to <see cref="amp"/> and climbs back (envelope [y-amp, y]).</summary>
+  /// <summary>FF2 homing bat: glides from its spawn height to a target height fixed at spawn (LevelPlanner picks it, biased
+  /// toward where the witch probably is) within LevelPlanner.HomeTime, then swoops down by up to <see cref="amp"/> and back.
+  /// Deterministic (no live tracking), so the street fairness check stays exact.</summary>
   public class Bat : ObstacleBase {
-    public float amp = 1.2f; float baseY, phase;
-    public override void OnSpawned(SpawnContext c){ base.OnSpawned(c); baseY = transform.position.y; phase = Random.value * 6f; }
+    public float amp = 1.2f, targetY; float startY, phase;
+    public override void OnSpawned(SpawnContext c){ base.OnSpawned(c); startY = transform.position.y; phase = Random.value * 6f; }
     protected override void Tick(float dt){
+      float home = Mathf.SmoothStep(0, 1, Mathf.Clamp01(t / LevelPlanner.HomeTime));
       float s = Mathf.Sin(t * 2.2f + phase);
-      var p = transform.position; p.x -= speed * dt; p.y = baseY - amp * s * s; transform.position = p;
+      float baseY = Mathf.Lerp(startY, targetY, home);
+      var p = transform.position; p.x -= speed * dt; p.y = baseY - amp * s * s * home; transform.position = p;
       transform.localRotation = Quaternion.Euler(0, 0, Mathf.Sin(t * 20f) * 20f);
     }
   }
-  /// <summary>Drifting ghost: floats left on a sine wave of amplitude <see cref="amp"/> around its spawn height.</summary>
+  /// <summary>FF2 homing ghost: drifts from its spawn height to a target height fixed at spawn within LevelPlanner.HomeTime,
+  /// then floats on a sine wave of amplitude <see cref="amp"/> around it.</summary>
   public class Ghost : ObstacleBase {
-    public float amp = 1f; float baseY, phase;
-    public override void OnSpawned(SpawnContext c){ base.OnSpawned(c); baseY = transform.position.y; phase = Random.value * 6f; }
+    public float amp = 1f, targetY; float startY, phase;
+    public override void OnSpawned(SpawnContext c){ base.OnSpawned(c); startY = transform.position.y; phase = Random.value * 6f; }
     protected override void Tick(float dt){
-      var p = transform.position; p.x -= speed * dt; p.y = baseY + amp * Mathf.Sin(t * 1.6f + phase); transform.position = p;
+      float home = Mathf.SmoothStep(0, 1, Mathf.Clamp01(t / LevelPlanner.HomeTime));
+      var p = transform.position; p.x -= speed * dt; p.y = Mathf.Lerp(startY, targetY, home) + amp * home * Mathf.Sin(t * 1.6f + phase); transform.position = p;
     }
   }
   public class Kid : ObstacleBase {

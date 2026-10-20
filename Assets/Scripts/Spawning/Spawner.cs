@@ -11,7 +11,7 @@ namespace BroomstickBash {
     public System.Func<float> difficultyOverride;   // hook: custom curve / QA
     public bool spawning = true;
     readonly List<ObstacleBase> live = new();
-    float timer, lastSpawnDistance; LevelPlanner planner;
+    float timer, sinceSpawn; LevelPlanner planner;
     public PlannedColumn LastColumn { get; private set; }
     public static float DifficultyAt(SpawnTable t, float distance) =>
       Mathf.Clamp01(t.difficultyByProgress.Evaluate(Mathf.Clamp01(distance / Mathf.Max(1, t.rampDistance))));
@@ -19,7 +19,7 @@ namespace BroomstickBash {
     public float SpeedMultiplier => table.speedByDifficulty.Evaluate(Difficulty);
     LevelPlanner Planner => planner ??= new LevelPlanner(new System.Random(), GameConfig.I.groundY, GameConfig.I.ceilingY){ table = table };
 
-    public void ResetSpawner(){ ClearAll(); timer = 1.5f; spawning = true; Planner.Reset(); lastSpawnDistance = 0; }
+    public void ResetSpawner(){ ClearAll(); timer = 1.5f; spawning = true; Planner.Reset(); sinceSpawn = 0; }
     public void ClearAll(bool puff = false){
       foreach (var o in live) if (o){ if (puff) Puff.Burst(o.transform.position, GameConfig.I.sparkleMat, 4); o.Despawn(); }
       live.Clear();
@@ -31,13 +31,12 @@ namespace BroomstickBash {
       if (!spawning || gm.State != GameState.Playing) return;
       // stop spawning shortly before the boss so the arena is clear when it arrives
       if (gm.Distance > table.bossDistance - spawnAhead) return;
-      timer -= Time.deltaTime;
-      if (timer <= 0){ SpawnColumn(); timer = table.intervalByDifficulty.Evaluate(Difficulty) * (0.9f + 0.2f * (float)Planner.rng.NextDouble()); }
+      timer -= Time.deltaTime; sinceSpawn += Time.deltaTime;
+      if (timer <= 0){ SpawnColumn(); timer = Mathf.Max(LevelPlanner.MinSingleInterval, table.intervalByDifficulty.Evaluate(Difficulty) * (0.9f + 0.2f * (float)Planner.rng.NextDouble())); }
     }
     public void SpawnColumn(){
       var gm = GameManager.I; float d = Difficulty, v = gm.ScrollSpeed;
-      float dx = lastSpawnDistance > 0 ? gm.Distance - lastSpawnDistance : 99f;
-      var col = Planner.Next(d, v, dx); LastColumn = col; lastSpawnDistance = gm.Distance;
+      var col = Planner.Next(d, v, sinceSpawn); LastColumn = col; sinceSpawn = 0;   // planner enforces multi-spawn spacing + reachability
       float x = cam.position.x + spawnAhead;
       foreach (var it in col.items){
         var o = ObstacleFactory.Create(it, x, GameConfig.I, table);
