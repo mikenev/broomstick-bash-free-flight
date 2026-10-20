@@ -46,7 +46,16 @@ namespace BroomstickBash {
     }
     public void GameOver(){ if (!IsActive) return; State = GameState.GameOver; End(); GameEvents.GameOver?.Invoke(); GameEvents.RunEnded?.Invoke(false, Score); }
     public void Win(){ if (State != GameState.Boss) return; KillScore += 500; State = GameState.Win; End(); GameEvents.Won?.Invoke(Score); GameEvents.RunEnded?.Invoke(true, Score); }
-    /// <summary>Playtest fix: restarting from game over / win (any key/click/tap or R) goes straight into a new run.</summary>
+    /// <summary>Restart from game over / win straight into a new run. FF3 (a): needs a DELIBERATE input (Enter / Space / R,
+    /// or a tap that isn't on the CAST button) after RestartDelay, so mashing cast (X/F/J/click) can't skip the score screen.</summary>
+    public const float RestartDelay = 1.2f;
+    bool RestartReady => Time.unscaledTime - endTime > RestartDelay;
+    static bool RestartPressed(){
+      var kb = Keyboard.current;
+      if (kb != null && (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame || kb.spaceKey.wasPressedThisFrame || kb.rKey.wasPressedThisFrame)) return true;
+      var ts = Touchscreen.current;
+      return ts != null && ts.primaryTouch.press.wasPressedThisFrame && !(TouchControls.I && TouchControls.I.CastPressedThisFrame);
+    }
     void Restart(){ ResetRun(); State = GameState.Playing; player.StartGrace(); }
     void End(){
       endTime = Time.unscaledTime;
@@ -58,10 +67,10 @@ namespace BroomstickBash {
       if (kb != null && kb.bKey.wasPressedThisFrame) StartBoss();          // dev/QA only: jump to boss
 #endif
       bool ended = State == GameState.GameOver || State == GameState.Win;
-      if (kb != null && kb.rKey.wasPressedThisFrame && State != GameState.Ready){ if (ended){ if (Time.unscaledTime - endTime > 0.6f) Restart(); } else ResetRun(); return; }
+      if (kb != null && kb.rKey.wasPressedThisFrame && State != GameState.Ready && !ended){ ResetRun(); return; }
       if (State == GameState.Ready){ if (FlightInput.StartPressed()) StartRun(); return; }
       if (ended){
-        if (Time.unscaledTime - endTime > 0.6f && FlightInput.StartPressed()) Restart();
+        if (RestartReady && RestartPressed()) Restart();
         return;
       }
       float dt = Time.deltaTime, v = ScrollSpeed;
@@ -82,6 +91,7 @@ namespace BroomstickBash {
     static string ControlHint => Touch
       ? "Drag on the left half to steer (the stick appears under your thumb)     Tap CAST (bottom right) to cast a spell"
       : "Arrows / WASD: fly (8 directions)     X / F / J / Enter / left-click: cast spell";
+    string RestartHint => !RestartReady ? " " : Touch ? "Tap" : "Press Enter or Space";
     void OnGUI(){
       float s = Screen.height / 720f;
       if (!white){ white = Texture2D.whiteTexture; }
@@ -121,9 +131,9 @@ namespace BroomstickBash {
       if (State == GameState.Ready)
         GUI.Label(full, $"BROOMSTICK BASH: FREE FLIGHT\n<size={sz}>{ControlHint}\nSpells zap bats & ghosts, but sparkle harmlessly past trick-or-treaters. Don't touch anything!\n{DebugHint}{(Touch ? "" : "R: restart")}\n\n{(Touch ? "Tap" : "Press any key or click")} to start</size>", big);
       else if (State == GameState.GameOver)
-        GUI.Label(full, $"GAME OVER\n<size={sz + 6}>Score {Score}{(newHigh ? "  NEW BEST!" : "")}\n{(Touch ? "Tap" : "Any key, click or R")} to restart</size>", big);
+        GUI.Label(full, $"GAME OVER\n<size={sz + 6}>Score {Score}{(newHigh ? "  NEW BEST!" : "")}\n{RestartHint} to restart</size>", big);
       else if (State == GameState.Win)
-        GUI.Label(full, $"YOU WIN!\n<size={sz + 6}>The Werewolf is vanquished!\nScore {Score}{(newHigh ? "  NEW BEST!" : "")}\n{(Touch ? "Tap" : "Any key, click or R")} to play again</size>", big);
+        GUI.Label(full, $"YOU WIN!\n<size={sz + 6}>The Werewolf is vanquished!\nScore {Score}{(newHigh ? "  NEW BEST!" : "")}\n{RestartHint} to play again</size>", big);
     }
   }
 }

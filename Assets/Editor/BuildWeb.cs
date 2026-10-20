@@ -312,8 +312,7 @@ public static class BuildWeb {
   public static void Build(){
     int code = 1;
     try {
-      // TODO(FF3): the boss fairness sweep still models the OLD flap physics (FlapModel). It keeps passing (patterns are
-      // unchanged), so it stays as a regression gate until FF3 re-models it with MovementConfig's free-flight kinematics.
+      // FF3: boss fairness gate on the free-flight model (MovementConfig); fails the build on any unfair pattern.
       if (!BossFairnessTest.Run()) throw new System.Exception("Boss fairness sweep found unfair patterns; see [Fairness] warnings");
       SetupScene();
       PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Gzip;
