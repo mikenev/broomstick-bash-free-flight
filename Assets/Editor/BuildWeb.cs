@@ -245,7 +245,7 @@ public static class BuildWeb {
     float lo = LevelPlanner.WindowLo, hi = LevelPlanner.WindowHi;
     for (int seed = 0; seed < Seeds; seed++){
       var rng = new System.Random(seed); var pl = new LevelPlanner(rng, ground, ceiling){ table = table };
-      float dist = 0, t = 0, timer = 1.5f, since = 0, lastMultiT = -99; PlannedColumn prevCol = null; System.Collections.Generic.List<Vector2> prevWins = null;
+      float dist = 0, t = 0, timer = 1.5f, since = 0, sincePrevCol = 0, lastMultiT = -99; PlannedColumn prevCol = null; System.Collections.Generic.List<Vector2> prevWins = null;
       while (dist < table.bossDistance){
         float d = Spawner.DifficultyAt(table, dist), v = baseSpeed * table.speedByDifficulty.Evaluate(d);
         if (seed == 0 && fullAt < 0 && d >= 0.999f) fullAt = t;
@@ -253,9 +253,11 @@ public static class BuildWeb {
         dist += v * dt; t += dt; since += dt;
         if (dist > table.bossDistance - LevelPlanner.SpawnAhead) continue;
         timer -= dt; if (timer > 0) continue;
-        var col = pl.Next(d, v, since); float dtSpawn = since; since = 0;
+        var col = pl.Next(d, v, since); sincePrevCol += since; float dtSpawn = sincePrevCol; since = 0;
         timer = Mathf.Max(LevelPlanner.MinSingleInterval, table.intervalByDifficulty.Evaluate(d) * (0.9f + 0.2f * (float)rng.NextDouble()));
         columns++; items += col.items.Count; if (col.template == "fallback") fallbacks++;
+        if (col.items.Count == 0) continue;   // skipped spawn: nothing to check, the chain continues from the last real column
+        sincePrevCol = 0;
         templates[col.template ?? "?"] = templates.TryGetValue(col.template ?? "?", out var tc) ? tc + 1 : 1;
         foreach (var it in col.items) kinds[it.kind] = kinds.TryGetValue(it.kind, out var kc) ? kc + 1 : 1;
         bool kid = false; foreach (var it in col.items) if (it.kind == ObstacleKind.Kid) kid = true;

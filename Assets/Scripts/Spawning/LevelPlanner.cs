@@ -44,8 +44,8 @@ namespace BroomstickBash {
   /// inside the witch's y bounds, and that gap must be reachable from the previous column's gap: the vertical distance between
   /// the two windows must be coverable rest-to-rest with MaxSpeed/AccelRate (see Reach) in the time between the witch leaving
   /// the previous column and entering this one (worst case over witch x offset and obstacle speeds, minus a reaction margin).
-  /// Multi-item spawns are at least MinMultiSpacing s apart. Patterns that fail are re-rolled; after MaxTries a single small kid
-  /// is used. BuildWeb.ValidateStreet re-checks every column independently and gates the WebGL build.</summary>
+  /// Multi-item spawns are at least MinMultiSpacing s apart. Patterns that fail are re-rolled; after MaxTries the spawn
+  /// is skipped (empty column). BuildWeb.RunStreetValidation re-checks every column independently and gates the WebGL build.</summary>
   public class LevelPlanner {
     // geometry shared with ObstacleFactory (keep in sync)
     public const float CarHeight = 1.95f, LampHeadR = 0.4f, BatHalf = 0.42f, GhostHalf = 0.62f;
@@ -106,28 +106,28 @@ namespace BroomstickBash {
       float r = R(0, tot); foreach (var k in ks){ r -= W(k, d); if (r <= 0) return k; }
       return ks[ks.Length - 1];
     }
-    PlannedColumn prev; float clock, lastMultiClock;
+    PlannedColumn prev; float clock, lastMultiClock, sincePrev;
     public LevelPlanner(System.Random r, float ground, float ceiling){ rng = r; groundY = ground; ceilingY = ceiling; Reset(); }
-    public void Reset(){ prev = null; clock = 0; lastMultiClock = -99; }
+    public void Reset(){ prev = null; clock = 0; lastMultiClock = -99; sincePrev = 0; }
     float R(float a, float b) => a + (float)rng.NextDouble() * (b - a);
 
     /// <summary>Plan the next column, <paramref name="dt"/> seconds after the previous one, at scroll speed <paramref name="scroll"/>.</summary>
     public PlannedColumn Next(float d, float scroll, float dt, bool allowGhost = true){
-      clock += dt;
+      clock += dt; sincePrev += dt; dt = sincePrev;   // reachability is measured from the last column that spawned anything
       bool multiOk = clock - lastMultiClock >= MinMultiSpacing;
       PlannedColumn best = null;
       for (int i = 0; i < MaxTries && best == null; i++){
         var c = Roll(d, allowGhost, multiOk); c.scroll = scroll;
         if (Check(c, d, scroll, dt, out var w)){ c.safe = w; best = c; }
       }
-      if (best == null){ // always-safe fallback: one small kid (leaves most of the sky)
-        best = new PlannedColumn{ template = "fallback", scroll = scroll };
-        best.items.Add(new PlannedItem{ kind = ObstacleKind.Kid, y = groundY, size = 1.0f, speed = 0.5f });
-        Check(best, d, scroll, dt, out var w); best.safe = w;
+      if (best == null){ // always-safe fallback: skip this spawn (empty column); the chain continues from the last real column
+        best = new PlannedColumn{ template = "fallback", scroll = scroll, safe = prev != null ? prev.safe : new Vector2(WindowLo, WindowHi) };
+        best.difficulty = d; best.interval = dt; best.clock = clock;
+        return best;
       }
       best.difficulty = d; best.interval = dt; best.clock = clock;
       if (best.Multi) lastMultiClock = clock;
-      prev = best;
+      prev = best; sincePrev = 0;
       return best;
     }
 
